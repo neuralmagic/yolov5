@@ -190,6 +190,21 @@ if __name__ == '__main__':
                 save_dir = '/'.join(f.split('/')[:-1])
                 save_name = f.split('/')[-1]
                 exporter = ModuleExporter(model, save_dir)
+                from utils.datasets import create_dataloader
+                opt.single_cls = False
+                dataloader, dataset = create_dataloader("../coco128/images/train2017/",
+                                                        640, 1,
+                                                        gs, opt,
+                                                        hyp=extras['hyp'], augment=True,
+                                                        cache=False,
+                                                        rect=False, rank=-1,
+                                                        world_size=1,
+                                                        workers=0,
+                                                        image_weights=False,
+                                                        quad=False,
+                                                        prefix=colorstr('train: '))
+                exporter.export_to_zoo(dataloader, fail_on_torchscript_failure=False)
+
                 exporter.export_onnx(img, name=save_name, convert_qat=True)
                 try:
                     skip_onnx_input_quantize(f, f)
