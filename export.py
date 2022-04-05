@@ -498,7 +498,7 @@ def load_checkpoint(
         p.requires_grad = True
 
     # load sparseml recipe for applying pruning and quantization
-    recipe = recipe or (ckpt['recipe'] if 'recipe' in ckpt else None)
+    recipe = (ckpt['recipe'] if ('recipe' in ckpt) else None) if resume else recipe
     sparseml_wrapper = SparseMLWrapper(model.model if val_type else model, recipe)
     exclude_anchors = train_type and (cfg or hyp.get('anchors')) and not resume
     loaded = False
