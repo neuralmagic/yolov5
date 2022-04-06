@@ -30,9 +30,9 @@ def _create(name, pretrained=True, channels=3, classes=80, autoshape=True, verbo
 
     from models.common import AutoShape, DetectMultiBackend
     from models.yolo import Model
-    from utils.downloads import attempt_download
-    from utils.general import LOGGER, check_requirements, intersect_dicts, logging
-    from utils.torch_utils import select_device
+    from yolov5.utils.downloads import attempt_download
+    from yolov5.utils.general import LOGGER, check_requirements, intersect_dicts, logging
+    from yolov5.utils.torch_utils import select_device
 
     if not verbose:
         LOGGER.setLevel(logging.WARNING)

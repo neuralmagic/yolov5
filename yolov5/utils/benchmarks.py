@@ -40,9 +40,9 @@ if str(ROOT) not in sys.path:
 
 import export
 import val
-from utils import notebook_init
-from utils.general import LOGGER, print_args
-from utils.torch_utils import select_device
+from yolov5.utils import notebook_init
+from yolov5.utils.general import LOGGER, print_args
+from yolov5.utils.torch_utils import select_device
 
 
 def run(weights=ROOT / 'yolov5s.pt',  # weights path
