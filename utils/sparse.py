@@ -40,14 +40,10 @@ def check_download_sparsezoo_weights(path):
 
 
 class SparseMLWrapper(object):
-    def __init__(self, model, recipe_new, recipe_base = None):
-        self.enabled = bool(recipe_new)
+    def __init__(self, model, recipe):
+        self.enabled = bool(recipe)
         self.model = model.module if is_parallel(model) else model
-        if self.enabled:
-            self.manager = (ScheduledModifierManager.compose_staged(recipe_base, recipe_new) 
-                        if recipe_base else ScheduledModifierManager.from_yaml(recipe_new))
-        else:
-            self.manager = None
+        self.manager = ScheduledModifierManager.from_yaml(recipe) if self.enabled else None
         self.logger = None
 
     def state_dict(self):
@@ -101,6 +97,9 @@ class SparseMLWrapper(object):
             return scaler
 
         return self.manager.modify(model, optimizer, steps_per_epoch=len(dataloader), wrap_optim=scaler)
+
+    def add_stage(self, additional_recipe):
+        self.manager = ScheduledModifierManager.compose_staged(self.manager, additional_recipe)
 
     def check_lr_override(self, scheduler, rank):
         # Override lr scheduler if recipe makes any LR updates

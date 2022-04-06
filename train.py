@@ -132,7 +132,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             resume=opt.resume, 
             rank=LOCAL_RANK
             )
-        ckpt, state_dict, sparseml_wrapper = extras['ckpt'], extras['state_dict'], extras['sparseml_wrapper']
+        ckpt, state_dict, sparseml_wrapper, start_epoch = extras['ckpt'], extras['state_dict'], extras['sparseml_wrapper'], extras['start_epoch']
         LOGGER.info(extras['report'])
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
@@ -424,7 +424,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 ckpt_extras = {'nc': nc,
                                'best_fitness': best_fitness,
                                'wandb_id': loggers.wandb.wandb_run.id if loggers.wandb else None,
-                               'date': datetime.now().isoformat()}
+                               'date': datetime.now().isoformat(),
+                               'additional_recipe': extras["additional_recipe"]}
                 ckpt = create_checkpoint(epoch, model, optimizer, ema, sparseml_wrapper, **ckpt_extras)
 
                 # Save last, best and delete
