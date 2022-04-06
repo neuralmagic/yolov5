@@ -40,11 +40,14 @@ def check_download_sparsezoo_weights(path):
 
 
 class SparseMLWrapper(object):
-    def __init__(self, model, recipe):
-        self.enabled = bool(recipe)
+    def __init__(self, model, recipe_new, recipe_base = None):
+        self.enabled = bool(recipe_new)
         self.model = model.module if is_parallel(model) else model
-        self.recipe = recipe
-        self.manager = ScheduledModifierManager.from_yaml(recipe) if self.enabled else None
+        if self.enabled:
+            self.manager = (ScheduledModifierManager.compose_staged(recipe_base, recipe_new) 
+                        if recipe_base else ScheduledModifierManager.from_yaml(recipe_new))
+        else:
+            self.manager = None
         self.logger = None
 
     def state_dict(self):

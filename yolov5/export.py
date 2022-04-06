@@ -498,24 +498,13 @@ def load_checkpoint(
         p.requires_grad = True
 
     # load sparseml recipe for applying pruning and quantization
-    recipe = (ckpt['recipe'] if ('recipe' in ckpt) else None) if resume else recipe
-    sparseml_wrapper = SparseMLWrapper(model.model if val_type else model, recipe)
+    recipe_new = (ckpt['recipe'] if ('recipe' in ckpt) else None) if resume else recipe
+    recipe_base = None if resume else ckpt['recipe']
+    sparseml_wrapper = SparseMLWrapper(model.model if val_type else model, recipe_new, recipe_base)
     exclude_anchors = train_type and (cfg or hyp.get('anchors')) and not resume
     loaded = False
 
     if not train_type:
-         # update param names for yolov5x5 models (model.x -> model.model.x)
-        '''
-        if ('version' not in ckpt or ckpt['version'] < 6) and sparseml_wrapper.manager is not None:
-            for modifier in sparseml_wrapper.manager.pruning_modifiers:
-                updated_params = []
-                for param in modifier.params:
-                    updated_params.append(
-                        "model." + param if (param.startswith('model.') and 
-                        not param.startswith('model.model.')) else param
-                )
-                modifier.params = updated_params
-        '''
         # apply the recipe to create the final state of the model when not training
         sparseml_wrapper.apply()
     else:
