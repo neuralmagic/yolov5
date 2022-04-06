@@ -37,14 +37,14 @@ ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 from export import load_checkpoint
 from models.common import DetectMultiBackend
-from yolov5.utils.callbacks import Callbacks
-from yolov5.utils.datasets import create_dataloader
-from yolov5.utils.general import (LOGGER, box_iou, check_dataset, check_img_size, check_requirements, check_yaml,
+from utils.callbacks import Callbacks
+from utils.datasets import create_dataloader
+from utils.general import (LOGGER, box_iou, check_dataset, check_img_size, check_requirements, check_yaml,
                            coco80_to_coco91_class, colorstr, increment_path, non_max_suppression, print_args,
                            scale_coords, xywh2xyxy, xyxy2xywh)
-from yolov5.utils.metrics import ConfusionMatrix, ap_per_class
-from yolov5.utils.plots import output_to_target, plot_images, plot_val_study
-from yolov5.utils.torch_utils import select_device, time_sync
+from utils.metrics import ConfusionMatrix, ap_per_class
+from utils.plots import output_to_target, plot_images, plot_val_study
+from utils.torch_utils import select_device, time_sync
 
 
 def save_one_txt(predn, save_conf, shape, file):
