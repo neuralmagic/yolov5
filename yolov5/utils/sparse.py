@@ -4,7 +4,7 @@ from sparsezoo import Zoo
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
 
-from yolov5.utils.torch_utils import is_parallel
+from utils.torch_utils import is_parallel
 
 
 def _get_model_framework_file(model, path):

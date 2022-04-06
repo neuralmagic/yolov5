@@ -70,13 +70,13 @@ ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 from models.common import Conv, DetectMultiBackend
 from models.experimental import attempt_load
 from models.yolo import Detect, Model
-from yolov5.utils.activations import SiLU
-from yolov5.utils.datasets import LoadImages
-from yolov5.utils.general import (LOGGER, check_dataset, check_img_size, check_requirements, check_version, colorstr,
+from utils.activations import SiLU
+from utils.datasets import LoadImages
+from utils.general import (LOGGER, check_dataset, check_img_size, check_requirements, check_version, colorstr,
                            file_size, print_args, url2file, intersect_dicts)
-from yolov5.utils.torch_utils import select_device, torch_distributed_zero_first, de_parallel
-from yolov5.utils.downloads import attempt_download
-from yolov5.utils.sparse import SparseMLWrapper, check_download_sparsezoo_weights
+from utils.torch_utils import select_device, torch_distributed_zero_first, de_parallel
+from utils.downloads import attempt_download
+from utils.sparse import SparseMLWrapper, check_download_sparsezoo_weights
 
 
 

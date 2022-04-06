@@ -84,7 +84,7 @@ def attempt_download(file, repo='ultralytics/yolov5'):  # from utils.downloads i
 
 
 def gdrive_download(id='16TiPfZj7htmTyhntwcZyEEAejOUxuT6m', file='tmp.zip'):
-    # Downloads a file from Google Drive. from yolov5.utils.downloads import *; gdrive_download()
+    # Downloads a file from Google Drive. from utils.downloads import *; gdrive_download()
     t = time.time()
     file = Path(file)
     cookie = Path('cookie')  # gdrive cookie

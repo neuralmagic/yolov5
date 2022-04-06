@@ -27,10 +27,10 @@ from PIL import ExifTags, Image, ImageOps
 from torch.utils.data import DataLoader, Dataset, dataloader, distributed
 from tqdm import tqdm
 
-from yolov5.utils.augmentations import Albumentations, augment_hsv, copy_paste, letterbox, mixup, random_perspective
-from yolov5.utils.general import (DATASETS_DIR, LOGGER, NUM_THREADS, check_dataset, check_requirements, check_yaml, clean_str,
+from utils.augmentations import Albumentations, augment_hsv, copy_paste, letterbox, mixup, random_perspective
+from utils.general import (DATASETS_DIR, LOGGER, NUM_THREADS, check_dataset, check_requirements, check_yaml, clean_str,
                            segments2boxes, xyn2xy, xywh2xyxy, xywhn2xyxy, xyxy2xywhn)
-from yolov5.utils.torch_utils import torch_distributed_zero_first
+from utils.torch_utils import torch_distributed_zero_first
 
 # Remap
 cv2.imread = lambda x: cv2.imdecode(np.fromfile(x, np.uint8), cv2.IMREAD_COLOR)  # for Chinese filenames
@@ -830,7 +830,7 @@ def flatten_recursive(path=DATASETS_DIR / 'coco128'):
         shutil.copyfile(file, new_path / Path(file).name)
 
 
-def extract_boxes(path=DATASETS_DIR / 'coco128'):  # from yolov5.utils.datasets import *; extract_boxes()
+def extract_boxes(path=DATASETS_DIR / 'coco128'):  # from utils.datasets import *; extract_boxes()
     # Convert detection dataset into classification dataset, with one directory per class
     path = Path(path)  # images dir
     shutil.rmtree(path / 'classifier') if (path / 'classifier').is_dir() else None  # remove existing
@@ -866,7 +866,7 @@ def extract_boxes(path=DATASETS_DIR / 'coco128'):  # from yolov5.utils.datasets 
 
 def autosplit(path=DATASETS_DIR / 'coco128/images', weights=(0.9, 0.1, 0.0), annotated_only=False):
     """ Autosplit a dataset into train/val/test splits and save path/autosplit_*.txt files
-    Usage: from yolov5.utils.datasets import *; autosplit()
+    Usage: from utils.datasets import *; autosplit()
     Arguments
         path:            Path to images directory
         weights:         Train, val, test weights (list, tuple)
@@ -943,8 +943,8 @@ def verify_image_label(args):
 def dataset_stats(path='coco128.yaml', autodownload=False, verbose=False, profile=False, hub=False):
     """ Return dataset statistics dictionary with images and instances counts per split per class
     To run in parent directory: export PYTHONPATH="$PWD/yolov5"
-    Usage1: from yolov5.utils.datasets import *; dataset_stats('coco128.yaml', autodownload=True)
-    Usage2: from yolov5.utils.datasets import *; dataset_stats('path/to/coco128_with_yaml.zip')
+    Usage1: from utils.datasets import *; dataset_stats('coco128.yaml', autodownload=True)
+    Usage2: from utils.datasets import *; dataset_stats('path/to/coco128_with_yaml.zip')
     Arguments
         path:           Path to data.yaml or data.zip (with data.yaml inside data.zip)
         autodownload:   Attempt to download dataset if not found locally

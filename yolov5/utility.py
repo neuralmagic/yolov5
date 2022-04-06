@@ -28,7 +28,7 @@ optional arguments:
 
 import argparse
 
-from yolov5.utils.general import strip_optimizer
+from utils.general import strip_optimizer
 
 STRIP_COMMAND = "strip"
 
