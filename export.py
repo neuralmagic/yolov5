@@ -433,10 +433,8 @@ def export_tfjs(keras_model, im, file, prefix=colorstr('TensorFlow.js:')):
     except Exception as e:
         LOGGER.info(f'\n{prefix} export failure: {e}')
 
-def create_checkpoint(epoch, model, optimizer, ema, sparseml_wrapper, additional_recipe, **kwargs):
+def create_checkpoint(epoch, model, optimizer, ema, sparseml_wrapper, **kwargs):
     pickle = not sparseml_wrapper.qat_active(epoch)  # qat does not support pickled exports
-    if additional_recipe is not None:
-        sparseml_wrapper.add_stage(additional_recipe)
     ckpt_model = deepcopy(model.module if is_parallel(model) else model).float()
     yaml = ckpt_model.yaml
     if not pickle:
@@ -500,27 +498,23 @@ def load_checkpoint(
         p.requires_grad = True
 
     # load sparseml recipe for applying pruning and quantization
-    additional_recipe = None
+    checkpoint_recipe = None
     if resume:
-        recipe = ckpt['recipe'] if ('recipe' in ckpt) else None
+        train_recipe = ckpt['recipe'] if ('recipe' in ckpt) else None
     elif ckpt['recipe'] or recipe:
-        recipe, additional_recipe = (ckpt['recipe'], recipe) if (ckpt['recipe'] and recipe) else ((ckpt['recipe'] or recipe), None)
+        train_recipe, checkpoint_recipe = recipe, ckpt['recipe']
 
-    sparseml_wrapper = SparseMLWrapper(model.model if val_type else model, recipe)
+    sparseml_wrapper = SparseMLWrapper(model.model if val_type else model, checkpoint_recipe, train_recipe)
     exclude_anchors = train_type and (cfg or hyp.get('anchors')) and not resume
     loaded = False
 
-    if not train_type:
-        # apply the recipe to create the final state of the model when not training
-        sparseml_wrapper.apply()
-    else:
+    sparseml_wrapper.apply(ckpt['epoch'] if 'epoch' in ckpt else 0)
+    if train_type:
         # intialize the recipe for training and restore the weights before if no quantized weights
         quantized_state_dict = any([name.endswith('.zero_point') for name in state_dict.keys()])
         if not quantized_state_dict:
             state_dict = load_state_dict(model, state_dict, train=True, exclude_anchors=exclude_anchors)
             loaded = True
-        if not resume:
-            start_epoch = sparseml_wrapper.manager.max_epochs + 1
         sparseml_wrapper.initialize(start_epoch)
 
     if not loaded:
@@ -535,7 +529,6 @@ def load_checkpoint(
         'start_epoch': start_epoch,
         'sparseml_wrapper': sparseml_wrapper,
         'report': report,
-        'additional_recipe': additional_recipe
     }
 
 

@@ -136,8 +136,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         LOGGER.info(extras['report'])
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
-        sparseml_wrapper = SparseMLWrapper(model, opt.recipe)
-        sparseml_wrapper.initialize(start_epoch=0.0)
+        sparseml_wrapper = SparseMLWrapper(model, None, opt.recipe)
+        sparseml_wrapper.initialize(start_epoch=0)
         ckpt = None
 
     # Freeze
@@ -196,16 +196,14 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     ema = ModelEMA(model, enabled=not opt.disable_ema) if RANK in [-1, 0] else None
 
     # Resume
-    start_epoch, best_fitness = 0, 0.0
+    start_epoch, best_fitness = sparseml_wrapper.start_epoch, 0.0
     if pretrained:
-        # Epochs
-        start_epoch = ckpt['epoch'] + 1
         if opt.resume:
             assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (weights, epochs)
         if epochs < start_epoch:
             LOGGER.info('%s has been trained for %g epochs. Fine-tuning for %g additional epochs.' %
-                        (weights, ckpt['epoch'], epochs))
-            epochs += ckpt['epoch']  # finetune additional epochs
+                        (weights, start_epoch-1, epochs))
+            epochs += start_epoch  # finetune additional epochs
         if sparseml_wrapper.qat_active(start_epoch):
             ema.enabled = False
 
@@ -424,8 +422,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 ckpt_extras = {'nc': nc,
                                'best_fitness': best_fitness,
                                'wandb_id': loggers.wandb.wandb_run.id if loggers.wandb else None,
-                               'date': datetime.now().isoformat(),
-                               'additional_recipe': extras["additional_recipe"]}
+                               'date': datetime.now().isoformat()}
                 ckpt = create_checkpoint(epoch, model, optimizer, ema, sparseml_wrapper, **ckpt_extras)
 
                 # Save last, best and delete

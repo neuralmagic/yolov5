@@ -40,28 +40,39 @@ def check_download_sparsezoo_weights(path):
 
 
 class SparseMLWrapper(object):
-    def __init__(self, model, recipe):
-        self.enabled = bool(recipe)
+    def __init__(self, model, checkpoint_recipe, train_recipe):
+        self.enabled = bool(checkpoint_recipe or train_recipe)
         self.model = model.module if is_parallel(model) else model
-        self.manager = ScheduledModifierManager.from_yaml(recipe) if self.enabled else None
+        self.checkpoint_manager = ScheduledModifierManager.from_yaml(checkpoint_recipe) if checkpoint_recipe else None
+        self.manager = ScheduledModifierManager.from_yaml(train_recipe) if train_recipe else None
         self.logger = None
+        self.start_epoch = None
 
     def state_dict(self):
+        if self.checkpoint_manager:
+            manager = ScheduledModifierManager.compose_staged(self.checkpoint_manager, self.manager)
+        else:
+            manager = self.manager
         return {
-            'recipe': str(self.manager) if self.enabled else None,
+            'recipe': str(manager) if self.enabled else None,
         }
 
-    def apply(self):
+    def apply(self, epoch):
         if not self.enabled:
             return
 
-        self.manager.apply(self.model)
+        if epoch < 0:
+            epoch = math.inf
+
+        if self.checkpoint_manager:
+            self.checkpoint_manager.apply_structure(self.model, epoch)
 
     def initialize(self, start_epoch):
         if not self.enabled:
             return
-
+            
         self.manager.initialize(self.model, start_epoch)
+        self.start_epoch = start_epoch
 
     def initialize_loggers(self, logger, tb_writer, wandb_logger):
         self.logger = logger
@@ -98,9 +109,6 @@ class SparseMLWrapper(object):
 
         return self.manager.modify(model, optimizer, steps_per_epoch=len(dataloader), wrap_optim=scaler)
 
-    def add_stage(self, additional_recipe):
-        self.manager = ScheduledModifierManager.compose_staged(self.manager, additional_recipe)
-
     def check_lr_override(self, scheduler, rank):
         # Override lr scheduler if recipe makes any LR updates
         if self.enabled and self.manager.learning_rate_modifiers:
@@ -115,7 +123,7 @@ class SparseMLWrapper(object):
         if self.enabled and self.manager.epoch_modifiers and self.manager.max_epochs:
             if rank in [0,-1]:
                 self.logger.info(f'Overriding number of epochs from SparseML manager to {epochs}')
-            epochs = self.manager.max_epochs or epochs  # override num_epochs
+            epochs = self.manager.max_epochs + self.start_epoch or epochs  # override num_epochs
 
         return epochs
 
