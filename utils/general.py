@@ -319,6 +319,10 @@ def check_requirements(requirements=ROOT / 'requirements.txt', exclude=(), insta
 
     n = 0  # number of packages updates
     for r in requirements:
+        if r.startswith("sparseml"):
+            version = r.split("sparseml")[1]
+            if pkg.working_set.find(pkg.Requirement("sparseml-nightly" + version)):
+                continue
         try:
             pkg.require(r)
         except Exception:  # DistributionNotFound or VersionConflict if requirements not met
@@ -803,9 +807,11 @@ def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_op
     for k in 'optimizer', 'best_fitness', 'wandb_id', 'ema', 'updates':  # keys
         x[k] = None
     x['epoch'] = -1
-    x['model'].half()  # to FP16
-    for p in x['model'].parameters():
-        p.requires_grad = False
+    pickled = isinstance(x['model'], torch.nn.Module)
+    if pickled:
+        x['model'].half()  # to FP16
+        for p in x['model'].parameters():
+            p.requires_grad = False
     torch.save(x, s or f)
     mb = os.path.getsize(s or f) / 1E6  # filesize
     LOGGER.info(f"Optimizer stripped from {f},{(' saved as %s,' % s) if s else ''} {mb:.1f}MB")

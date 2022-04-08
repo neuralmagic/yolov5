@@ -87,7 +87,10 @@ class Loggers():
                 if not sync_bn:  # tb.add_graph() --sync known issue https://github.com/ultralytics/yolov5/issues/3754
                     with warnings.catch_warnings():
                         warnings.simplefilter('ignore')  # suppress jit trace warning
-                        self.tb.add_graph(torch.jit.trace(de_parallel(model), imgs[0:1], strict=False), [])
+                        try:
+                            self.tb.add_graph(torch.jit.trace(de_parallel(model), imgs[0:1], strict=False), [])
+                        except Exception:
+                            warnings.warn("Couldn't create quantized graph for Tensorboard")
             if ni < 3:
                 f = self.save_dir / f'train_batch{ni}.jpg'  # filename
                 Thread(target=plot_images, args=(imgs, targets, paths, f), daemon=True).start()
