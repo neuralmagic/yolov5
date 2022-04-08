@@ -498,7 +498,7 @@ def load_checkpoint(
         p.requires_grad = True
 
     # load sparseml recipe for applying pruning and quantization
-    checkpoint_recipe = None
+    checkpoint_recipe = train_recipe = None
     if resume:
         train_recipe = ckpt['recipe'] if ('recipe' in ckpt) else None
     elif ckpt['recipe'] or recipe:
@@ -526,7 +526,6 @@ def load_checkpoint(
     return model, {
         'ckpt': ckpt,
         'state_dict': state_dict,
-        'start_epoch': start_epoch,
         'sparseml_wrapper': sparseml_wrapper,
         'report': report,
     }

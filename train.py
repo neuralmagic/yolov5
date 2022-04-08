@@ -132,7 +132,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             resume=opt.resume, 
             rank=LOCAL_RANK
             )
-        ckpt, state_dict, sparseml_wrapper, start_epoch = extras['ckpt'], extras['state_dict'], extras['sparseml_wrapper'], extras['start_epoch']
+        ckpt, state_dict, sparseml_wrapper = extras['ckpt'], extras['state_dict'], extras['sparseml_wrapper']
         LOGGER.info(extras['report'])
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
@@ -196,7 +196,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     ema = ModelEMA(model, enabled=not opt.disable_ema) if RANK in [-1, 0] else None
 
     # Resume
-    start_epoch, best_fitness = sparseml_wrapper.start_epoch, 0.0
+    start_epoch = sparseml_wrapper.start_epoch or 0
+    best_fitness = 0.0
     if pretrained:
         if opt.resume:
             assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (weights, epochs)
