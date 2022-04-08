@@ -57,7 +57,7 @@ class SparseMLWrapper(object):
             'recipe': str(manager) if self.enabled else None,
         }
 
-    def apply(self, epoch):
+    def apply_checkpoint_structure(self, epoch):
         if not self.enabled:
             return
 

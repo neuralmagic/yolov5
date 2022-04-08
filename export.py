@@ -508,7 +508,7 @@ def load_checkpoint(
     exclude_anchors = train_type and (cfg or hyp.get('anchors')) and not resume
     loaded = False
 
-    sparseml_wrapper.apply(ckpt['epoch'] if 'epoch' in ckpt else 0)
+    sparseml_wrapper.apply_checkpoint_structure(float("inf"))
     if train_type:
         # intialize the recipe for training and restore the weights before if no quantized weights
         quantized_state_dict = any([name.endswith('.zero_point') for name in state_dict.keys()])
