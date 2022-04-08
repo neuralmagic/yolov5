@@ -41,7 +41,7 @@ def check_download_sparsezoo_weights(path):
 
 class SparseMLWrapper(object):
     def __init__(self, model, checkpoint_recipe, train_recipe):
-        self.enabled = bool(checkpoint_recipe or train_recipe)
+        self.enabled = bool(train_recipe)
         self.model = model.module if is_parallel(model) else model
         self.checkpoint_manager = ScheduledModifierManager.from_yaml(checkpoint_recipe) if checkpoint_recipe else None
         self.manager = ScheduledModifierManager.from_yaml(train_recipe) if train_recipe else None
@@ -49,28 +49,23 @@ class SparseMLWrapper(object):
         self.start_epoch = None
 
     def state_dict(self):
-        if self.checkpoint_manager:
-            manager = ScheduledModifierManager.compose_staged(self.checkpoint_manager, self.manager)
-        else:
-            manager = self.manager
+        manager = (ScheduledModifierManager.compose_staged(self.checkpoint_manager, self.manager) 
+        if self.checkpoint_manager and self.enabled else self.manager)
+
         return {
             'recipe': str(manager) if self.enabled else None,
         }
 
-    def apply_checkpoint_structure(self, epoch):
+    def apply_checkpoint_structure(self):
         if not self.enabled:
             return
 
-        if epoch < 0:
-            epoch = math.inf
-
         if self.checkpoint_manager:
-            self.checkpoint_manager.apply_structure(self.model, epoch)
+            self.checkpoint_manager.apply_structure(self.model, math.inf)
 
     def initialize(self, start_epoch):
         if not self.enabled:
             return
-            
         self.manager.initialize(self.model, start_epoch)
         self.start_epoch = start_epoch
 
