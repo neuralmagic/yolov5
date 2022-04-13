@@ -501,8 +501,8 @@ def load_checkpoint(
     checkpoint_recipe = train_recipe = None
     if resume:
         train_recipe = ckpt['recipe'] if ('recipe' in ckpt) else None
-    elif ckpt['recipe'] or recipe:
-        train_recipe, checkpoint_recipe = recipe, ckpt['recipe']
+    elif recipe or ('recipe' in ckpt and ckpt['recipe']):
+        train_recipe, checkpoint_recipe = recipe, ckpt['recipe'] if ('recipe' in ckpt) else None
 
     sparseml_wrapper = SparseMLWrapper(model.model if val_type else model, checkpoint_recipe, train_recipe)
     exclude_anchors = train_type and (cfg or hyp.get('anchors')) and not resume
