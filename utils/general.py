@@ -40,6 +40,7 @@ DATASETS_DIR = ROOT.parent / 'datasets'  # YOLOv5 datasets directory
 NUM_THREADS = min(8, max(1, os.cpu_count() - 1))  # number of YOLOv5 multiprocessing threads
 VERBOSE = str(os.getenv('YOLOv5_VERBOSE', True)).lower() == 'true'  # global verbose mode
 FONT = 'Arial.ttf'  # https://ultralytics.com/assets/Arial.ttf
+NM_INTEGRATED=True
 
 torch.set_printoptions(linewidth=320, precision=5, profile='long')
 np.set_printoptions(linewidth=320, formatter={'float_kind': '{:11.5g}'.format})  # format short g, %precision=5
@@ -405,7 +406,11 @@ def check_file(file, suffix=''):
         return file
     else:  # search
         files = []
+        if "models_v5.0/" in file:
+            files.extend(glob.glob(str(ROOT / '**' / file), recursive=True))
         for d in 'data', 'models', 'utils':  # search directories
+            if file.startswith(d + os.path.sep):
+                file = file[len(d)+1:]
             files.extend(glob.glob(str(ROOT / d / '**' / file), recursive=True))  # find file
         assert len(files), f'File not found: {file}'  # assert file was found
         assert len(files) == 1, f"Multiple files match '{file}', specify exact path: {files}"  # assert unique
@@ -707,12 +712,13 @@ def clip_coords(boxes, shape):
 
 def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False,
                         labels=(), max_det=300):
-    """Runs Non-Maximum Suppression (NMS) on inference results
+    """Non-Maximum Suppression (NMS) on inference results to reject overlapping bounding boxes
 
     Returns:
          list of detections, on (n,6) tensor per image [xyxy, conf, cls]
     """
 
+    bs = prediction.shape[0]  # batch size
     nc = prediction.shape[2] - 5  # number of classes
     xc = prediction[..., 4] > conf_thres  # candidates
 
@@ -721,18 +727,19 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     assert 0 <= iou_thres <= 1, f'Invalid IoU {iou_thres}, valid values are between 0.0 and 1.0'
 
     # Settings
-    min_wh, max_wh = 2, 7680  # (pixels) minimum and maximum box width and height
+    # min_wh = 2  # (pixels) minimum box width and height
+    max_wh = 7680  # (pixels) maximum box width and height
     max_nms = 30000  # maximum number of boxes into torchvision.ops.nms()
-    time_limit = 10.0  # seconds to quit after
+    time_limit = 0.030 * bs  # seconds to quit after
     redundant = True  # require redundant detections
     multi_label &= nc > 1  # multiple labels per box (adds 0.5ms/img)
     merge = False  # use merge-NMS
 
     t = time.time()
-    output = [torch.zeros((0, 6), device=prediction.device)] * prediction.shape[0]
+    output = [torch.zeros((0, 6), device=prediction.device)] * bs
     for xi, x in enumerate(prediction):  # image index, image inference
         # Apply constraints
-        x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
+        # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
         x = x[xc[xi]]  # confidence
 
         # Cat apriori labels if autolabelling
@@ -793,7 +800,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
 
         output[xi] = x[i]
         if (time.time() - t) > time_limit:
-            LOGGER.warning(f'WARNING: NMS time limit {time_limit}s exceeded')
+            LOGGER.warning(f'WARNING: NMS time limit {time_limit:.3f}s exceeded')
             break  # time limit exceeded
 
     return output
