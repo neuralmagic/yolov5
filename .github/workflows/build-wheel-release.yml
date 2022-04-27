@@ -1,13 +1,11 @@
+name: Upload Release Wheel
 on:
   push:
     tags:
     - 'v*' 
 
-name: Upload Release Wheel
-
 jobs:
-  build:
-    name: Upload Release Asset
+  build-wheel:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
