@@ -10,8 +10,8 @@ jobs:
   build-wheel:
     runs-on: "ubuntu-latest"
     steps:
-      - name: Checkout code
-        uses: neuralmagic/yolov5@master
+      - name: checkout
+        uses: actions/checkout@v2
       - name: Build wheel
         run: | 
           ./build_wheel.sh
