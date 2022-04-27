@@ -15,14 +15,15 @@ jobs:
       - name: Build wheel
         run: | 
           ./build_wheel.sh
-      - name: Upload Release Asset
+          echo "::set-output name=wheel::$(ls dist/*.whl)"
+        id: build_wheel
+      - name: Upload Wheel Asset
         id: upload-release-asset 
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: "https://uploads.github.com/repos/neuralmagic/yolov5/releases/65514986/assets{?name,label}" 
-          title: "Development Build"
-          files: |
-            dist/*.gz
-            dist/*.whl
+          asset_path: ${{ steps.build_wheel.outputs.wheel }}
+          asset_name: ${{ steps.build_wheel.outputs.wheel }}
+          asset_content_type: application/whl
