@@ -8,7 +8,6 @@ on:
 
 jobs:
   build-wheel:
-    runs-on: "ubuntu-latest"
     steps:
       - name: Checkout code
         uses: neuralmagic/yolov5@test-gha
