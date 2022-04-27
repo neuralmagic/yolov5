@@ -1,6 +1,4 @@
 ---
-name: "pre-release"
-
 on:
   push:
     branches:
