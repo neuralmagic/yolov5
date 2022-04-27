@@ -17,11 +17,11 @@ jobs:
           ./build_wheel.sh
       - name: Create Release
         id: create_release
-        uses: neuralmagic/yolov5@latest
+        uses: neuralmagic/yolov5@test-gha
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
+          tag: nightly
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: true
