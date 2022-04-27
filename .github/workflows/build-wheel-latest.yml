@@ -12,11 +12,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Get release
-        id: get_release
-        uses: neuralmagic/yolov5@nightly
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
       - name: Build wheel
         run: | 
           ./build_wheel.sh
@@ -26,7 +21,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }} 
+          upload_url: ${{ neuralmagic/yolov5@nightly.GITHUB_TOKEN }} 
           title: "Development Build"
           files: |
             dist/*.gz
