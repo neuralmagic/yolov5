@@ -64,7 +64,6 @@ class SparseMLWrapper(object):
         if self.checkpoint_manager:
             self.checkpoint_manager.apply_structure(self.model, math.inf)
 
-    # TODO add for loaded checkpoints
     def initialize(
         self, 
         start_epoch, 
@@ -76,10 +75,9 @@ class SparseMLWrapper(object):
         if not self.enabled:
             return
 
-        #TODO: lambdafy
         grad_sampler = GradSampler(
             self._mfac_data_loader(train_loader, device, **train_loader_kwargs), 
-            lambda pred, target: compute_loss(pred, target.to(device))[0]
+            lambda pred, target: compute_loss([p for p in pred[1]], target.to(device))[0]
         )
 
         self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler)
