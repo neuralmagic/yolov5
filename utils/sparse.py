@@ -153,8 +153,8 @@ class SparseMLWrapper(object):
     def _apply_one_shot(self):
         if self.manager is not None:
             self.manager.apply(self.model)
-            _LOGGER.info(f"Applied recipe {self.train_recipe} in One-Shot")
+            _LOGGER.info(f"Applied recipe {self.train_recipe} in one-shot manner")
         else:
-            _LOGGER.info(f"Recipe not found for one-shot. Got recipe: "
+            _LOGGER.info(f"Training recipe for one-shot application not recognized by the manager. Got recipe: "
                          f"{self.train_recipe}"
                          )
