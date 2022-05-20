@@ -202,8 +202,11 @@ class SparseMLWrapper(object):
                 sample_out = list(sample_out)
                 file_idx = f"{exported_samples}".zfill(4)
 
-                numpy.savez(f"{sample_in_dir}/inp-{file_idx}.npz", sample_in)
-                numpy.savez(f"{sample_out_dir}/out-{file_idx}.npz", *sample_out)
+                sample_input_filename = os.path.join(f"{sample_in_dir}", f"inp-{file_idx}.npz")
+                numpy.savez(sample_input_filename, sample_in)
+
+                sample_output_filename = os.path.join(f"{sample_out_dir}", f"out-{file_idx}.npz")
+                numpy.savez(sample_output_filename, *sample_out)
                 exported_samples += 1
 
                 if exported_samples >= num_export_samples:
