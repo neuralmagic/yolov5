@@ -4,7 +4,7 @@ name: Upload Nightly Wheel
 on:
   push:
     branches:
-      - "master"
+      - "fix-auto-build"
 
 jobs:
   build-wheel:
