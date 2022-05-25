@@ -27,4 +27,3 @@ jobs:
           asset_name: ${{ steps.build_wheel.outputs.wheel_name }}
           tag: "nightly"
           overwrite: true
-          body: "This is my release text"
