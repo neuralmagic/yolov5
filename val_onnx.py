@@ -578,6 +578,8 @@ def val_onnx_run(**kwargs):
         setattr(opt, k, v)
     main(opt)
     return opt
+
+
 if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
