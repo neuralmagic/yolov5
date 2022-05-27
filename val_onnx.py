@@ -50,9 +50,9 @@ import onnx
 import torch
 from tqdm import tqdm
 
-from yolov5.utils.callbacks import Callbacks
-from yolov5.utils.datasets import create_dataloader
-from yolov5.utils.general import (
+from utils.callbacks import Callbacks
+from utils.datasets import create_dataloader
+from utils.general import (
     LOGGER,
     ROOT,
     box_iou,
@@ -68,9 +68,9 @@ from yolov5.utils.general import (
     xywh2xyxy,
     xyxy2xywh,
 )
-from yolov5.utils.metrics import ConfusionMatrix, ap_per_class
-from yolov5.utils.plots import plot_val_study
-from yolov5.utils.torch_utils import select_device, time_sync
+from utils.metrics import ConfusionMatrix, ap_per_class
+from utils.plots import plot_val_study
+from utils.torch_utils import select_device, time_sync
 
 
 DEEPSPARSE = "deepsparse"
