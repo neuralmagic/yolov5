@@ -338,8 +338,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             train_loader=train_loader, 
             device=device, 
             multi_scale=opt.multi_scale, 
-            imgsz=imgsz, 
-            gs=gs
+            img_size=imgsz, 
+            grid_size=gs
         )
 
     # Continue as expected
