@@ -141,8 +141,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             steps_per_epoch=opt.max_train_steps,
             one_shot=opt.one_shot,
         )
-        if not opt.one_shot:
-            sparseml_wrapper.initialize(start_epoch=0)
         ckpt = None
 
     # Freeze
@@ -201,7 +199,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     ema = ModelEMA(model, enabled=not opt.disable_ema) if RANK in [-1, 0] else None
 
     # Resume
-    start_epoch = sparseml_wrapper.start_epoch or 0
+    start_epoch = start_epoch or 0
     best_fitness = 0.0
     if pretrained:
         if opt.resume:
@@ -330,6 +328,17 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
         torch.cuda.empty_cache()
         return results
+
+    else:
+        sparseml_wrapper.initialize(
+            start_epoch= start_epoch,  
+            compute_loss=compute_loss, 
+            train_loader=train_loader, 
+            device=device, 
+            multi_scale=opt.multi_scale, 
+            imgsz=imgsz, 
+            gs=gs
+        )
 
     # Continue as expected
     if RANK in [-1, 0]:
