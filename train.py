@@ -132,6 +132,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             )
         ckpt, state_dict, sparseml_wrapper = extras['ckpt'], extras['state_dict'], extras['sparseml_wrapper']
         LOGGER.info(extras['report'])
+        start_epoch = ckpt['epoch'] + 1 if 'epoch' in ckpt else 0
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
         sparseml_wrapper = SparseMLWrapper(
@@ -141,6 +142,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             steps_per_epoch=opt.max_train_steps,
             one_shot=opt.one_shot,
         )
+        start_epoch=0
         ckpt = None
 
     # Freeze
