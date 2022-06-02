@@ -226,6 +226,7 @@ class SparseMLWrapper(object):
 
         os.makedirs(sample_in_dir, exist_ok=True)
         os.makedirs(sample_out_dir, exist_ok=True)
+        model_was_in_train_mode = self.model.training
         self.model.eval()
 
         for _, (images, _, _, _) in enumerate(dataloader):
@@ -268,5 +269,6 @@ class SparseMLWrapper(object):
             f"Exported {exported_samples} samples to {save_dir}"
         )
 
-        # reset model.training
-        self.model.train()
+        # reset model.training if needed
+        if model_was_in_train_mode:
+            self.model.train()
