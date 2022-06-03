@@ -142,7 +142,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             steps_per_epoch=opt.max_train_steps,
             one_shot=opt.one_shot,
         )
-        start_epoch=0
+        start_epoch = 0
         ckpt = None
 
     # Freeze
@@ -333,13 +333,18 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     else:
         sparseml_wrapper.initialize(
-            start_epoch= start_epoch,  
+            start_epoch=start_epoch,
             compute_loss=compute_loss, 
             train_loader=train_loader, 
             device=device, 
             multi_scale=opt.multi_scale, 
             img_size=imgsz, 
-            grid_size=gs
+            grid_size=gs,
+            teacher_cfg=opt.teacher_cfg,
+            teacher_weights=opt.teacher_weigts,
+            hyp=hyp,
+            nc=nc,
+            rank=LOCAL_RANK,
         )
 
     # Continue as expected
@@ -553,7 +558,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 def parse_opt(known=False, default_project_dir = None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
+    parser.add_argument('--teacher_weights', type=str, default='', help='teacher weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
+    parser.add_argument('--teacher_cfg', type=str, default='', help='teacher_model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)

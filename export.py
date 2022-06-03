@@ -459,7 +459,7 @@ def load_checkpoint(
     nc=None, 
     data=None, 
     dnn=False, 
-    half = False, 
+    half=False,
     recipe=None, 
     resume=None, 
     rank=-1,

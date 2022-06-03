@@ -10,6 +10,8 @@ from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
 from sparseml.pytorch.utils import GradSampler
 
+from export import load_checkpoint
+
 from utils.torch_utils import is_parallel
 import torch.nn as nn
 import torch
@@ -50,7 +52,14 @@ def check_download_sparsezoo_weights(path):
 
 
 class SparseMLWrapper(object):
-    def __init__(self, model, checkpoint_recipe, train_recipe, steps_per_epoch=-1, one_shot=False):
+    def __init__(
+            self,
+            model,
+            checkpoint_recipe,
+            train_recipe,
+            steps_per_epoch=-1,
+            one_shot=False,
+    ):
         self.enabled = bool(train_recipe)
         self.model = model.module if is_parallel(model) else model
         self.checkpoint_manager = ScheduledModifierManager.from_yaml(checkpoint_recipe) if checkpoint_recipe else None
@@ -81,8 +90,13 @@ class SparseMLWrapper(object):
         start_epoch, 
         compute_loss, 
         train_loader, 
-        device, 
-        **train_loader_kwargs
+        device,
+        teacher_cfg,
+        teacher_weights,
+        hyp,
+        nc,
+        rank,
+        **train_loader_kwargs,
     ):
         if not self.enabled:
             return
@@ -92,7 +106,18 @@ class SparseMLWrapper(object):
             lambda pred, target: compute_loss([p for p in pred[1]], target.to(device))[0]
         )
 
-        self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler)
+        if teacher_cfg and teacher_weights:
+            teacher_model, _ = load_checkpoint(
+                type_='val',
+                weights=teacher_weights,
+                device=device,
+                cfg=teacher_cfg,
+                hyp=hyp,
+                nc=nc,
+                rank=rank,
+            )
+
+        self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler, disillation_teacher=teacher_model)
         self.start_epoch = start_epoch
 
     def initialize_loggers(self, logger, tb_writer, wandb_logger):
