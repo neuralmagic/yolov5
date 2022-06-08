@@ -332,6 +332,19 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         return results
 
     else:
+        if opt.teacher_cfg and opt.teacher_weights:
+            teacher_model, extras = load_checkpoint(
+                type_='val',
+                weights=opt.teacher_weights,
+                device=device,
+                cfg=opt.teacher_cfg,
+                nc=nc,
+                rank=LOCAL_RANK,
+            )
+            LOGGER.info(extras['report'])
+        else:
+            teacher_model = None
+
         sparseml_wrapper.initialize(
             start_epoch=start_epoch,
             compute_loss=compute_loss, 
@@ -340,17 +353,14 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             multi_scale=opt.multi_scale, 
             img_size=imgsz, 
             grid_size=gs,
-            teacher_cfg=opt.teacher_cfg,
-            teacher_weights=opt.teacher_weigts,
-            hyp=hyp,
-            nc=nc,
-            rank=LOCAL_RANK,
+            teacher_model=teacher_model.model,
+            optimizer=optimizer,
         )
 
     # Continue as expected
     if RANK in [-1, 0]:
         sparseml_wrapper.initialize_loggers(loggers.logger, loggers.tb, loggers.wandb)
-    scaler = sparseml_wrapper.modify(scaler, optimizer, model, train_loader)
+    scaler = sparseml_wrapper.modify(scaler, train_loader)
     scheduler = sparseml_wrapper.check_lr_override(scheduler, RANK)
     epochs = sparseml_wrapper.check_epoch_override(epochs, RANK)
 
@@ -410,7 +420,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             # Forward
             with amp.autocast(enabled=half_precision):
                 pred = model(imgs)  # forward
-                loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
+                loss, loss_items = sparseml_wrapper.compute_loss(epoch, imgs, pred, targets.to(device)) # loss scaled by batch_size
                 if RANK != -1:
                     loss *= WORLD_SIZE  # gradient averaged between devices in DDP mode
                 if opt.quad:
