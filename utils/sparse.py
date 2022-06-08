@@ -10,9 +10,7 @@ from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
 from sparseml.pytorch.utils import GradSampler
 
-from export import load_checkpoint
-
-from utils.torch_utils import is_parallel
+from utils.torch_utils import is_parallel, de_parallel
 import torch.nn as nn
 import torch
 import numpy
@@ -51,6 +49,11 @@ def check_download_sparsezoo_weights(path):
     return path
 
 
+def set_export(module):
+    if hasattr(module, "export"):
+        setattr(module, "export", False)
+
+
 class SparseMLWrapper(object):
     def __init__(
             self,
@@ -69,6 +72,8 @@ class SparseMLWrapper(object):
         self.steps_per_epoch = steps_per_epoch
         self.one_shot = one_shot
         self.train_recipe = train_recipe
+        self.original_compute_loss = None
+        self.optimizer = None
 
         if self.one_shot:
             self._apply_one_shot()
@@ -91,11 +96,8 @@ class SparseMLWrapper(object):
         compute_loss, 
         train_loader, 
         device,
-        teacher_cfg,
-        teacher_weights,
-        hyp,
-        nc,
-        rank,
+        teacher_model,
+        optimizer,
         **train_loader_kwargs,
     ):
         if not self.enabled:
@@ -106,19 +108,12 @@ class SparseMLWrapper(object):
             lambda pred, target: compute_loss([p for p in pred[1]], target.to(device))[0]
         )
 
-        if teacher_cfg and teacher_weights:
-            teacher_model, _ = load_checkpoint(
-                type_='val',
-                weights=teacher_weights,
-                device=device,
-                cfg=teacher_cfg,
-                hyp=hyp,
-                nc=nc,
-                rank=rank,
-            )
+        teacher_model.apply(set_export)
 
-        self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler, disillation_teacher=teacher_model)
+        self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler, distillation_teacher=teacher_model)
         self.start_epoch = start_epoch
+        self.original_compute_loss = compute_loss
+        self.optimizer = optimizer
 
     def initialize_loggers(self, logger, tb_writer, wandb_logger):
         self.logger = logger
@@ -149,12 +144,12 @@ class SparseMLWrapper(object):
                 file.write(str(self.manager))
             wandb_logger.wandb.log_artifact(artifact)
 
-    def modify(self, scaler, optimizer, model, dataloader):
+    def modify(self, scaler, dataloader):
         if not self.enabled:
             return scaler
 
         self.steps_per_epoch = self.steps_per_epoch if self.steps_per_epoch > 0 else len(dataloader)
-        return self.manager.modify(model, optimizer, steps_per_epoch=self.steps_per_epoch, wrap_optim=scaler)
+        return self.manager.modify(self.model, self.optimizer, steps_per_epoch=self.steps_per_epoch, wrap_optim=scaler)
 
     def check_lr_override(self, scheduler, rank):
         # Override lr scheduler if recipe makes any LR updates
@@ -284,3 +279,25 @@ class SparseMLWrapper(object):
         _LOGGER.info(
             f"Exported {exported_samples} samples to {save_dir}"
         )
+
+    def compute_loss(self, epoch, inputs, student_outputs, targets):
+        loss, loss_items = self.original_compute_loss(student_outputs, targets)
+
+        if (
+            self.manager is not None
+            and self.manager.initialized
+            and self.manager.enabled
+            and self.manager.distillation_modifiers
+        ):
+            loss = self.manager.loss_update(
+                loss,
+                self.model,
+                self.optimizer,
+                epoch,
+                self.steps_per_epoch,
+                student_outputs=student_outputs,
+                student_inputs=inputs,
+                student_labels=targets,
+            )
+
+        return loss, loss_items
