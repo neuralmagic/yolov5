@@ -1,19 +1,4 @@
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
-
-# Copyright (c) 2021 - present / Neuralmagic, Inc. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """
 Experimental modules
 """
@@ -48,9 +33,7 @@ class Sum(nn.Module):
         self.weight = weight  # apply weights boolean
         self.iter = range(n - 1)  # iter object
         if weight:
-            self.w = nn.Parameter(
-                -torch.arange(1.0, n) / 2, requires_grad=True
-            )  # layer weights
+            self.w = nn.Parameter(-torch.arange(1.0, n) / 2, requires_grad=True)  # layer weights
 
     def forward(self, x):
         y = x[0]  # no weight
@@ -66,13 +49,11 @@ class Sum(nn.Module):
 
 class MixConv2d(nn.Module):
     # Mixed Depth-wise Conv https://arxiv.org/abs/1907.09595
-    def __init__(
-        self, c1, c2, k=(1, 3), s=1, equal_ch=True
-    ):  # ch_in, ch_out, kernel, stride, ch_strategy
+    def __init__(self, c1, c2, k=(1, 3), s=1, equal_ch=True):  # ch_in, ch_out, kernel, stride, ch_strategy
         super().__init__()
         n = len(k)  # number of convolutions
         if equal_ch:  # equal c_ per group
-            i = torch.linspace(0, n - 1e-6, c2).floor()  # c2 indices
+            i = torch.linspace(0, n - 1E-6, c2).floor()  # c2 indices
             c_ = [(i == g).sum() for g in range(n)]  # intermediate channels
         else:  # equal weight.numel() per group
             b = [c2] + [0] * n
@@ -80,18 +61,10 @@ class MixConv2d(nn.Module):
             a -= np.roll(a, 1, axis=1)
             a *= np.array(k) ** 2
             a[0] = 1
-            c_ = np.linalg.lstsq(a, b, rcond=None)[
-                0
-            ].round()  # solve for equal weight indices, ax = b
+            c_ = np.linalg.lstsq(a, b, rcond=None)[0].round()  # solve for equal weight indices, ax = b
 
         self.m = nn.ModuleList(
-            [
-                nn.Conv2d(
-                    c1, int(c_), k, s, k // 2, groups=math.gcd(c1, int(c_)), bias=False
-                )
-                for k, c_ in zip(k, c_)
-            ]
-        )
+            [nn.Conv2d(c1, int(c_), k, s, k // 2, groups=math.gcd(c1, int(c_)), bias=False) for k, c_ in zip(k, c_)])
         self.bn = nn.BatchNorm2d(c2)
         self.act = nn.SiLU()
 
@@ -121,10 +94,8 @@ def attempt_load(weights, map_location=None, inplace=True, fuse=True):
     model = Ensemble()
     for w in weights if isinstance(weights, list) else [weights]:
         ckpt = torch.load(attempt_download(w), map_location=map_location)  # load
-        ckpt = (ckpt.get("ema") or ckpt["model"]).float()  # FP32 model
-        model.append(
-            ckpt.fuse().eval() if fuse else ckpt.eval()
-        )  # fused or un-fused model in eval mode
+        ckpt = (ckpt.get('ema') or ckpt['model']).float()  # FP32 model
+        model.append(ckpt.fuse().eval() if fuse else ckpt.eval())  # fused or un-fused model in eval mode
 
     # Compatibility updates
     for m in model.modules():
@@ -132,23 +103,19 @@ def attempt_load(weights, map_location=None, inplace=True, fuse=True):
         if t in (nn.Hardswish, nn.LeakyReLU, nn.ReLU, nn.ReLU6, nn.SiLU, Detect, Model):
             m.inplace = inplace  # torch 1.7.0 compatibility
             if t is Detect:
-                if not isinstance(
-                    m.anchor_grid, list
-                ):  # new Detect Layer compatibility
-                    delattr(m, "anchor_grid")
-                    setattr(m, "anchor_grid", [torch.zeros(1)] * m.nl)
+                if not isinstance(m.anchor_grid, list):  # new Detect Layer compatibility
+                    delattr(m, 'anchor_grid')
+                    setattr(m, 'anchor_grid', [torch.zeros(1)] * m.nl)
         elif t is Conv:
             m._non_persistent_buffers_set = set()  # torch 1.6.0 compatibility
-        elif t is nn.Upsample and not hasattr(m, "recompute_scale_factor"):
+        elif t is nn.Upsample and not hasattr(m, 'recompute_scale_factor'):
             m.recompute_scale_factor = None  # torch 1.11.0 compatibility
 
     if len(model) == 1:
         return model[-1]  # return model
     else:
-        print(f"Ensemble created with {weights}\n")
-        for k in ["names"]:
+        print(f'Ensemble created with {weights}\n')
+        for k in ['names']:
             setattr(model, k, getattr(model[-1], k))
-        model.stride = model[
-            torch.argmax(torch.tensor([m.stride.max() for m in model])).int()
-        ].stride  # max stride
+        model.stride = model[torch.argmax(torch.tensor([m.stride.max() for m in model])).int()].stride  # max stride
         return model  # return ensemble
