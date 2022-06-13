@@ -34,7 +34,7 @@ import yaml
 from utils.downloads import gsutil_getsize
 from utils.metrics import box_iou, fitness
 try:
-    from sparseml.yolov5 import ROOT as sparseml_root
+    from sparseml.yolov5 import ROOT_PATH as sparseml_root
 except:
     sparseml_root = None
 
