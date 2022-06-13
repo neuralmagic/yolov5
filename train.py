@@ -31,12 +31,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import SGD, Adam, AdamW, lr_scheduler
 from tqdm import tqdm
 
-FILE = Path(__file__).resolve()
-ROOT = FILE.parents[0]  # YOLOv5 root directory
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))  # add ROOT to PATH
-ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
-
 import val  # for end-of-epoch mAP
 from export import load_checkpoint, create_checkpoint
 from models.yolo import Model
@@ -44,7 +38,7 @@ from utils.autoanchor import check_anchors
 from utils.autobatch import check_train_batch_size
 from utils.callbacks import Callbacks
 from utils.datasets import create_dataloader
-from utils.general import (LOGGER, check_dataset, check_file, check_git_status, check_img_size, check_requirements,
+from utils.general import (LOGGER, ROOT, check_dataset, check_file, check_git_status, check_img_size, check_requirements,
                            check_suffix, check_yaml, colorstr, get_latest_run, increment_path, init_seeds,
                            labels_to_class_weights, labels_to_image_weights, methods, one_cycle,
                            print_args, print_mutation, strip_optimizer)
@@ -55,6 +49,13 @@ from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
 from utils.sparse import SparseMLWrapper
+
+
+FILE = Path(__file__).resolve()
+LOCAL_ROOT = FILE.parents[0]  # YOLOv5 root directory
+if str(LOCAL_ROOT) not in sys.path:
+    sys.path.append(str(LOCAL_ROOT))  # add ROOT to PATH
+LOCAL_ROOT = Path(os.path.relpath(LOCAL_ROOT, Path.cwd()))  # relative
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
