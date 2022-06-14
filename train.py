@@ -74,7 +74,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Directories
     w = save_dir / 'weights'  # weights dir
     (w.parent if evolve else w).mkdir(parents=True, exist_ok=True)  # make dir
-    last, best = w / 'last.pt', w / 'best.pt'
+    last = w / 'last.pt'
 
     # Hyperparameters
     if isinstance(hyp, str):
@@ -489,8 +489,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
-                if best_fitness == fi:
-                    torch.save(ckpt, best)
                 if (epoch > 0) and (opt.save_period > 0) and (epoch % opt.save_period == 0):
                     torch.save(ckpt, w / f'epoch{epoch}.pt')
                 del ckpt
@@ -519,26 +517,25 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         f = last
         if f.exists():
             strip_optimizer(f)  # strip optimizers
-            if f is best:
-                LOGGER.info(f'\nValidating {f}...')
-                results, _, _ = val.run(data_dict,
-                                        batch_size=batch_size // WORLD_SIZE * 2,
-                                        imgsz=imgsz,
-                                        model=load_checkpoint(type_='ensemble', weights=best, device=device)[0],
-                                        iou_thres=0.65 if is_coco else 0.60,  # best pycocotools results at 0.65
-                                        single_cls=single_cls,
-                                        dataloader=val_loader,
-                                        save_dir=save_dir,
-                                        save_json=is_coco,
-                                        verbose=True,
-                                        plots=True,
-                                        callbacks=callbacks,
-                                        compute_loss=compute_loss,  # val best model with plots
-                                        half=half_precision)
-                if is_coco:
-                    callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness, fi)
+            LOGGER.info(f'\nValidating {f}...')
+            results, _, _ = val.run(data_dict,
+                                    batch_size=batch_size // WORLD_SIZE * 2,
+                                    imgsz=imgsz,
+                                    model=load_checkpoint(type_='ensemble', weights=last, device=device)[0],
+                                    iou_thres=0.65 if is_coco else 0.60,  # best pycocotools results at 0.65
+                                    single_cls=single_cls,
+                                    dataloader=val_loader,
+                                    save_dir=save_dir,
+                                    save_json=is_coco,
+                                    verbose=True,
+                                    plots=True,
+                                    callbacks=callbacks,
+                                    compute_loss=compute_loss,  # val best model with plots
+                                    half=half_precision)
+            if is_coco:
+                callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness, fi)
 
-        callbacks.run('on_train_end', last, best, plots, epoch, results)
+        callbacks.run('on_train_end', last, '', plots, epoch, results)
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
 
     if opt.num_export_samples > 0:
