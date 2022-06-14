@@ -100,6 +100,7 @@ class SparseMLWrapper(object):
         optimizer,
         **train_loader_kwargs,
     ):
+        self.original_compute_loss = compute_loss
         if not self.enabled:
             return
 
@@ -108,11 +109,11 @@ class SparseMLWrapper(object):
             lambda pred, target: compute_loss([p for p in pred[1]], target.to(device))[0]
         )
 
-        teacher_model.apply(set_export)
+        if teacher_model is not None:
+            teacher_model.apply(set_export)
 
         self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler, distillation_teacher=teacher_model)
         self.start_epoch = start_epoch
-        self.original_compute_loss = compute_loss
         self.optimizer = optimizer
 
     def initialize_loggers(self, logger, tb_writer, wandb_logger):
