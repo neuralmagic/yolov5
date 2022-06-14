@@ -342,6 +342,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 rank=LOCAL_RANK,
             )
             LOGGER.info(extras['report'])
+            teacher_model = teacher_model.model
         else:
             teacher_model = None
 
@@ -353,7 +354,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             multi_scale=opt.multi_scale, 
             img_size=imgsz, 
             grid_size=gs,
-            teacher_model=teacher_model.model,
+            teacher_model=teacher_model,
             optimizer=optimizer,
         )
 
