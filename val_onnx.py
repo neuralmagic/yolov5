@@ -144,9 +144,9 @@ def process_batch(detections, labels, iouv):
 
 def get_stride(yolo_pipeline: Pipeline) -> int:
     """
-    Infer strides from model file and image shape
+    Infer max stride from pipeline
 
-    :param model_path: Path to model file
+    :param yolo_pipeline: pipeline to infer the max stride of
     """
     model = onnx.load(yolo_pipeline.onnx_file_path)
     image_size = get_tensor_dim_shape(model.graph.input[0], 2)
