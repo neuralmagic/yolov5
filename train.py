@@ -420,7 +420,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
             # Forward
             with amp.autocast(enabled=half_precision):
-                pred = model(imgs)  # forward
                 loss, loss_items = sparseml_wrapper.compute_loss(epoch, imgs, pred, targets.to(device)) # loss scaled by batch_size
                 if RANK != -1:
                     loss *= WORLD_SIZE  # gradient averaged between devices in DDP mode

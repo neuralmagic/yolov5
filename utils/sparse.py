@@ -11,6 +11,7 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 from sparseml.pytorch.utils import GradSampler
 
 from utils.torch_utils import is_parallel, de_parallel
+from utils.plots import feature_visualization
 import torch.nn as nn
 import torch
 import numpy
@@ -111,6 +112,47 @@ class SparseMLWrapper(object):
 
         if teacher_model is not None:
             teacher_model.apply(set_export)
+
+        if self.manager.feature_distillation_modifiers:
+            def student_forward(self, x, augment=False, profile=False, visualize=False, with_feature=False):
+                if augment:
+                    return self._forward_augment(x)
+                elif with_feature:
+                    return self._forward_with_feature(x, profile, visualize)
+                else:
+                    return self._forward_once(x, profile, visualize)
+
+            def teacher_forward(self, x):
+                return self._forward_with_feature(x)
+
+            def _forward_with_feature(self, x, profile=False, visualize=False):
+                y, dt = [], []  # outputs
+                output = {}
+                for m in self.model:
+                    if m.f != -1:  # if not from previous layer
+                        x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+                    if profile:
+                        self._profile_one_layer(m, x, dt)
+                    if m.__class__.__name__ == "Detect":
+                        output["feature"] = x
+                    x = m(x)  # run
+                    y.append(x if m.i in self.save else None)  # save output
+                    if visualize:
+                        feature_visualization(x, m.type, m.i, save_dir=visualize)
+                output["output"] = x
+                return output
+
+            model_forward_with_feature = _forward_with_feature.__get__(self.model.model, self.model.model.__class__)
+            setattr(self.model.model, "_forward_with_feature", model_forward_with_feature)
+
+            teacher_model_forward_with_feature = _forward_with_feature.__get__(self.teacher_model, self.teacher_model.__class__)
+            setattr(self.teacher_model, "_forward_with_feature", teacher_model_forward_with_feature)
+
+            model_forward = student_forward.__get__(self.model.model, self.model.model.__class__)
+            setattr(self.model.model, "forward", model_forward)
+
+            teacher_model_forward = teacher_forward.__get__(self.teacher_model, self.teacher_model.__class__)
+            setattr(self.teacher_model, "forward", teacher_model_forward)
 
         self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler, distillation_teacher=teacher_model)
         self.start_epoch = start_epoch
@@ -281,8 +323,18 @@ class SparseMLWrapper(object):
             f"Exported {exported_samples} samples to {save_dir}"
         )
 
-    def compute_loss(self, epoch, inputs, student_outputs, targets):
-        loss, loss_items = self.original_compute_loss(student_outputs, targets)
+    def compute_loss(self, epoch, inputs, targets):
+        if (
+            self.manager is not None
+            and self.manager.initialized
+            and self.manager.enabled
+            and self.manager.feature_distillation_modifiers
+        ):
+            student_outputs = self.model(inputs, with_feature=True)
+            loss, loss_items = self.original_compute_loss(student_outputs["output"], targets)
+        else:
+            student_outputs = self.model(inputs)
+            loss, loss_items = self.original_compute_loss(student_outputs, targets)
 
         if (
             self.manager is not None
