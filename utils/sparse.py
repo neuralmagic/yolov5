@@ -145,14 +145,14 @@ class SparseMLWrapper(object):
             model_forward_with_feature = _forward_with_feature.__get__(self.model.model, self.model.model.__class__)
             setattr(self.model.model, "_forward_with_feature", model_forward_with_feature)
 
-            teacher_model_forward_with_feature = _forward_with_feature.__get__(self.teacher_model, self.teacher_model.__class__)
-            setattr(self.teacher_model, "_forward_with_feature", teacher_model_forward_with_feature)
+            teacher_model_forward_with_feature = _forward_with_feature.__get__(teacher_model, teacher_model.__class__)
+            setattr(teacher_model, "_forward_with_feature", teacher_model_forward_with_feature)
 
             model_forward = student_forward.__get__(self.model.model, self.model.model.__class__)
             setattr(self.model.model, "forward", model_forward)
 
-            teacher_model_forward = teacher_forward.__get__(self.teacher_model, self.teacher_model.__class__)
-            setattr(self.teacher_model, "forward", teacher_model_forward)
+            teacher_model_forward = teacher_forward.__get__(teacher_model, teacher_model.__class__)
+            setattr(teacher_model, "forward", teacher_model_forward)
 
         self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler, distillation_teacher=teacher_model)
         self.start_epoch = start_epoch
