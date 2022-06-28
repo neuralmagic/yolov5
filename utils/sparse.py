@@ -1,9 +1,10 @@
+import copy
 import logging
 import math
 from copy import deepcopy
 import random
 import os
-from typing import Optional
+from typing import Optional, Iterable
 
 from sparsezoo import Zoo
 from sparseml.pytorch.optim import ScheduledModifierManager
@@ -134,7 +135,10 @@ class SparseMLWrapper(object):
                     if profile:
                         self._profile_one_layer(m, x, dt)
                     if m.__class__.__name__ == "Detect":
-                        output["feature"] = x
+                        if isinstance(x, list):
+                            output["feature"] = [torch.clone(xl) for xl in x]
+                        else:
+                            output["feature"] = torch.clone(x)
                     x = m(x)  # run
                     y.append(x if m.i in self.save else None)  # save output
                     if visualize:
@@ -142,14 +146,14 @@ class SparseMLWrapper(object):
                 output["output"] = x
                 return output
 
-            model_forward_with_feature = _forward_with_feature.__get__(self.model.model, self.model.model.__class__)
-            setattr(self.model.model, "_forward_with_feature", model_forward_with_feature)
+            model_forward_with_feature = _forward_with_feature.__get__(self.model, self.model.__class__)
+            setattr(self.model, "_forward_with_feature", model_forward_with_feature)
 
             teacher_model_forward_with_feature = _forward_with_feature.__get__(teacher_model, teacher_model.__class__)
             setattr(teacher_model, "_forward_with_feature", teacher_model_forward_with_feature)
 
-            model_forward = student_forward.__get__(self.model.model, self.model.model.__class__)
-            setattr(self.model.model, "forward", model_forward)
+            model_forward = student_forward.__get__(self.model, self.model.__class__)
+            setattr(self.model, "forward", model_forward)
 
             teacher_model_forward = teacher_forward.__get__(teacher_model, teacher_model.__class__)
             setattr(teacher_model, "forward", teacher_model_forward)
