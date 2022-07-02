@@ -38,7 +38,7 @@ if str(ROOT) not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 import val  # for end-of-epoch mAP
-from export import load_checkpoint, create_checkpoint
+from export import load_checkpoint, create_checkpoint, load_teacher
 from models.yolo import Model
 from utils.autoanchor import check_anchors
 from utils.autobatch import check_train_batch_size
@@ -333,16 +333,15 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     else:
         if opt.teacher_cfg and opt.teacher_weights:
-            teacher_model, extras = load_checkpoint(
-                type_='val',
+            teacher_model = load_teacher(
                 weights=opt.teacher_weights,
                 device=device,
                 cfg=opt.teacher_cfg,
                 nc=nc,
                 rank=LOCAL_RANK,
             )
-            LOGGER.info(extras['report'])
-            teacher_model = teacher_model.model
+            if cuda and RANK != -1:
+                teacher_model = DDP(teacher_model, device_ids=[LOCAL_RANK], output_device=LOCAL_RANK)
         else:
             teacher_model = None
 
@@ -420,7 +419,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
             # Forward
             with amp.autocast(enabled=half_precision):
-                loss, loss_items = sparseml_wrapper.compute_loss(epoch, imgs, targets.to(device)) # loss scaled by batch_size
+                preds = model(imgs)
+                loss, loss_items = sparseml_wrapper.compute_loss(epoch, imgs, preds, targets.to(device)) # loss scaled by batch_size
                 if RANK != -1:
                     loss *= WORLD_SIZE  # gradient averaged between devices in DDP mode
                 if opt.quad:

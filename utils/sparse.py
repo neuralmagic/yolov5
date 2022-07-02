@@ -50,12 +50,6 @@ def check_download_sparsezoo_weights(path):
 
     return path
 
-
-def set_export(module):
-    if hasattr(module, "export"):
-        setattr(module, "export", False)
-
-
 class SparseMLWrapper(object):
     def __init__(
             self,
@@ -110,9 +104,6 @@ class SparseMLWrapper(object):
             self._mfac_data_loader(train_loader, device, **train_loader_kwargs), 
             lambda pred, target: compute_loss([p for p in pred[1]], target.to(device))[0]
         )
-
-        if teacher_model is not None:
-            teacher_model.apply(set_export)
 
         if self.manager.feature_distillation_modifiers:
             def student_forward(self, x, augment=False, profile=False, visualize=False, with_feature=False):
@@ -327,17 +318,17 @@ class SparseMLWrapper(object):
             f"Exported {exported_samples} samples to {save_dir}"
         )
 
-    def compute_loss(self, epoch, inputs, targets):
+    def compute_loss(self, epoch, inputs, student_outputs, targets):
         if (
             self.manager is not None
             and self.manager.initialized
             and self.manager.enabled
             and self.manager.feature_distillation_modifiers
         ):
-            student_outputs = self.model(inputs, with_feature=True)
+            #student_outputs = self.model(inputs, with_feature=True)
             loss, loss_items = self.original_compute_loss(student_outputs["output"], targets)
         else:
-            student_outputs = self.model(inputs)
+            #student_outputs = self.model(inputs)
             loss, loss_items = self.original_compute_loss(student_outputs, targets)
 
         if (

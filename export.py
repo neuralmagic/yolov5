@@ -538,6 +538,21 @@ def load_checkpoint(
         'report': report,
     }
 
+def load_teacher(weights, device, cfg, nc, rank):
+    teacher_model, _ = load_checkpoint(
+        type_='train',
+        weights=weights,
+        device=device,
+        cfg=cfg,
+        nc=nc,
+        rank=rank,
+    )
+
+    teacher_model.model[-1].export = False
+    teacher_model.eval()
+    teacher_model.model.eval()
+
+    return teacher_model
 
 def load_state_dict(model, state_dict, run_mode, exclude_anchors):
     # fix older state_dict names not porting to the new model setup
