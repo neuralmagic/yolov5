@@ -369,6 +369,8 @@ class SparseMLWrapper(object):
             and self.manager.enabled
             and self.manager.distillation_modifiers
         ):
+            batch_size = inputs.size(0)
+            loss = loss / batch_size
             loss = self.manager.loss_update(
                 loss,
                 self.model,
@@ -379,5 +381,6 @@ class SparseMLWrapper(object):
                 student_inputs=inputs,
                 student_labels=targets,
             )
+            loss = loss * batch_size
 
         return loss, loss_items
