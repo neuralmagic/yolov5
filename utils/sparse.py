@@ -84,7 +84,10 @@ class SparseMLWrapper(object):
 
     def apply_checkpoint_structure(self):
         if self.checkpoint_manager:
-            self.checkpoint_manager.apply_structure(self.model, math.inf)
+            if is_parallel(self.model):
+                self.checkpoint_manager.apply_structure(self.model.module, math.inf)
+            else:
+                self.checkpoint_manager.apply_structure(self.model, math.inf)
 
     def initialize(
         self, 
@@ -137,17 +140,46 @@ class SparseMLWrapper(object):
                 output["output"] = x
                 return output
 
-            model_forward_with_feature = _forward_with_feature.__get__(self.model, self.model.__class__)
-            setattr(self.model, "_forward_with_feature", model_forward_with_feature)
+            if is_parallel(self.model):
+                model_forward_with_feature = _forward_with_feature.__get__(
+                    self.model.module,
+                    self.model.module.__class__,
+                )
+                setattr(self.model.module, "_forward_with_feature", model_forward_with_feature)
 
-            teacher_model_forward_with_feature = _forward_with_feature.__get__(teacher_model, teacher_model.__class__)
-            setattr(teacher_model, "_forward_with_feature", teacher_model_forward_with_feature)
+                model_forward = student_forward.__get__(
+                    self.model.module,
+                    self.model.module.__class__,
+                )
+                setattr(self.model.module, "forward", model_forward)
+            else:
+                model_forward_with_feature = _forward_with_feature.__get__(self.model, self.model.__class__)
+                setattr(self.model, "_forward_with_feature", model_forward_with_feature)
 
-            model_forward = student_forward.__get__(self.model, self.model.__class__)
-            setattr(self.model, "forward", model_forward)
+                model_forward = student_forward.__get__(self.model, self.model.__class__)
+                setattr(self.model, "forward", model_forward)
 
-            teacher_model_forward = teacher_forward.__get__(teacher_model, teacher_model.__class__)
-            setattr(teacher_model, "forward", teacher_model_forward)
+            if is_parallel(teacher_model):
+                teacher_model_forward_with_feature = _forward_with_feature.__get__(
+                    teacher_model.module,
+                    teacher_model.module.__class__,
+                )
+                setattr(teacher_model.module, "_forward_with_feature", teacher_model_forward_with_feature)
+
+                teacher_model_forward = teacher_forward.__get__(
+                    teacher_model.module,
+                    teacher_model.module.__class__,
+                )
+                setattr(teacher_model.module, "forward", teacher_model_forward)
+            else:
+                teacher_model_forward_with_feature = _forward_with_feature.__get__(
+                    teacher_model,
+                    teacher_model.__class__,
+                )
+                setattr(teacher_model, "_forward_with_feature", teacher_model_forward_with_feature)
+
+                teacher_model_forward = teacher_forward.__get__(teacher_model, teacher_model.__class__)
+                setattr(teacher_model, "forward", teacher_model_forward)
 
         self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler, distillation_teacher=teacher_model)
         self.start_epoch = start_epoch
@@ -318,17 +350,17 @@ class SparseMLWrapper(object):
             f"Exported {exported_samples} samples to {save_dir}"
         )
 
-    def compute_loss(self, epoch, inputs, student_outputs, targets):
+    def compute_loss(self, epoch, inputs, targets):
         if (
             self.manager is not None
             and self.manager.initialized
             and self.manager.enabled
             and self.manager.feature_distillation_modifiers
         ):
-            #student_outputs = self.model(inputs, with_feature=True)
+            student_outputs = self.model(inputs, with_feature=True)
             loss, loss_items = self.original_compute_loss(student_outputs["output"], targets)
         else:
-            #student_outputs = self.model(inputs)
+            student_outputs = self.model(inputs)
             loss, loss_items = self.original_compute_loss(student_outputs, targets)
 
         if (
