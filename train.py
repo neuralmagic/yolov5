@@ -611,7 +611,7 @@ def parse_opt(known=False, skip_parse=False):
     parser.add_argument("--num-export-samples", type=int, default=0, help="The number of sample inputs/outputs to export, default=0")
 
     if skip_parse:
-        opt = parser.parse_known_args([])
+        opt = parser.parse_args([])
     elif known:
         opt = parser.parse_known_args()[0] 
     else: 

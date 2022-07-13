@@ -697,7 +697,7 @@ def parse_opt(known = False, skip_parse = False):
                         default=['torchscript', 'onnx'],
                         help='torchscript, onnx, openvino, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs')
     if skip_parse:
-        opt = parser.parse_known_args([])
+        opt = parser.parse_args([])
     elif known:
         opt = parser.parse_known_args()[0] 
     else: 
