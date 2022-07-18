@@ -141,6 +141,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             model,
             None,
             opt.recipe,
+            train_mode=True,
             steps_per_epoch=opt.max_train_steps,
             one_shot=opt.one_shot,
         )
@@ -314,7 +315,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             "date": datetime.now().isoformat(),
         }
         ckpt = create_checkpoint(
-            -1, model, optimizer, ema, sparseml_wrapper, **ckpt_extras
+            -1, True, model, optimizer, ema, sparseml_wrapper, **ckpt_extras
         )
         one_shot_checkpoint_name = w / "checkpoint-one-shot.pt"
         torch.save(ckpt, one_shot_checkpoint_name)
@@ -486,7 +487,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                'best_fitness': best_fitness,
                                'wandb_id': loggers.wandb.wandb_run.id if loggers.wandb else None,
                                'date': datetime.now().isoformat()}
-                ckpt = create_checkpoint(epoch, model, optimizer, ema, sparseml_wrapper, **ckpt_extras)
+                ckpt = create_checkpoint(epoch, final_epoch, model, optimizer, ema, sparseml_wrapper, **ckpt_extras)
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
@@ -554,7 +555,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     return results
 
 
-def parse_opt(known=False):
+def parse_opt(known=False, skip_parse=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
@@ -609,7 +610,13 @@ def parse_opt(known=False):
     parser.add_argument("--one-shot", action="store_true", default=False, help="Apply recipe in one shot manner")
     parser.add_argument("--num-export-samples", type=int, default=0, help="The number of sample inputs/outputs to export, default=0")
 
-    opt = parser.parse_known_args()[0] if known else parser.parse_args()
+    if skip_parse:
+        opt = parser.parse_args([])
+    elif known:
+        opt = parser.parse_known_args()[0] 
+    else: 
+        opt = parser.parse_args()
+    
     return opt
 
 
@@ -748,7 +755,7 @@ def main(opt, callbacks=Callbacks()):
 
 def run(**kwargs):
     # Usage: import train; train.run(data='coco128.yaml', imgsz=320, weights='yolov5m.pt')
-    opt = parse_opt(True)
+    opt = parse_opt(known = True) if not kwargs else parse_opt(skip_parse = True)
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
