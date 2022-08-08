@@ -3,11 +3,10 @@ import math
 import random
 import os
 from typing import Any, Dict, Optional
-
+from re import search
 from sparsezoo import Model
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
-from sparseml.pytorch.utils import GradSampler
 from sparseml.pytorch.sparsification.quantization import QuantizationModifier
 import torchvision.transforms.functional as F
 
@@ -20,14 +19,13 @@ _LOGGER = logging.getLogger(__file__)
 
 def _get_model_framework_file(model, path):
     available_files = model.training.default.files
-    transfer_request = 'recipe_type=transfer' in path
+    transfer_request = search("recipe(.*)transfer", path)
     checkpoint_available = any([".ckpt" in file.name for file in available_files])
     final_available = any([not ".ckpt" in file.name for file in available_files])
 
     if transfer_request and checkpoint_available:
         # checkpoints are saved for transfer learning use cases,
-        # return checkpoint if avaiable and requested
-        print([file for file in available_files if ".ckpt" in file.name][0])
+        # return checkpoint if available and requested
         return [file for file in available_files if ".ckpt" in file.name][0]
     elif final_available:
         # default to returning final state, if available
@@ -277,8 +275,8 @@ class SparseMLWrapper(object):
         device = "cuda" if torch.cuda.is_available() else "cpu"
         exported_samples = 0
 
-        sample_in_dir = os.path.join(save_dir, "sample-inputs")
-        sample_out_dir = os.path.join(save_dir, "sample-outputs")
+        sample_in_dir = os.path.join(save_dir, "sample_inputs")
+        sample_out_dir = os.path.join(save_dir, "sample_outputs")
 
         os.makedirs(sample_in_dir, exist_ok=True)
         os.makedirs(sample_out_dir, exist_ok=True)
