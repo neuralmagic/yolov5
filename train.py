@@ -321,15 +321,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         torch.save(ckpt, one_shot_checkpoint_name)
         LOGGER.info(f"One shot checkpoint saved to {one_shot_checkpoint_name}")
 
-        if opt.num_export_samples > 0:
-            dataloader = val_loader or train_loader
-            sparseml_wrapper.save_sample_inputs_outputs(
-                dataloader=dataloader,
-                num_export_samples=opt.num_export_samples,
-                save_dir=str(w),
-                image_size=imgsz,
-            )
-
         del ckpt
 
         torch.cuda.empty_cache()

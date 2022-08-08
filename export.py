@@ -647,14 +647,18 @@ def run(data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
 
     # Sample data Exports
     if num_export_samples > 0:
-        val_loader = create_dataloader(val_path, imgsz, batch_size, gs, single_cls,
-                                       hyp=hyp, cache=None if noval else opt.cache,
-                                       rect=True, rank=-1, workers=workers * 2, pad=0.5,
-                                       prefix=colorstr('val: '))[0]
+        LOGGER.info(f"\n{colorstr('Exporting data samples:')} {num_export_samples} in total.")
+        # Image size
+        gs = max(int(model.stride.max()), 32)  # grid size (max stride)
+        imgsz = check_img_size(opt.imgsz, gs, floor=gs * 2) # verify imgsz is gs-multiple
+        if isinstance(imgsz, list):
+            imgsz = imgsz[0]
+
+        val_loader = create_dataloader(path=check_dataset(data)['val'], imgsz=imgsz, batch_size=batch_size, stride=gs)[0]
         sparseml_wrapper.save_sample_inputs_outputs(
             dataloader=val_loader,
             num_export_samples=num_export_samples,
-            save_dir=str(w),
+            save_dir= os.path.dirname(file),
             image_size=imgsz,
         )
 
