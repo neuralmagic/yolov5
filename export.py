@@ -468,8 +468,6 @@ def load_checkpoint(
     with torch_distributed_zero_first(rank):
 
         # download if not found locally or from sparsezoo if stub
-        print(check_download_sparsezoo_weights(weights))
-        print(weights)
         weights = attempt_download(weights) or check_download_sparsezoo_weights(weights)
     ckpt = torch.load(weights[0] if isinstance(weights, list) or isinstance(weights, tuple)
                       else weights, map_location="cpu")  # load checkpoint
