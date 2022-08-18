@@ -437,10 +437,10 @@ def export_tfjs(keras_model, im, file, prefix=colorstr('TensorFlow.js:')):
 
 def create_deployment_folder(file):
     model_root_dir = file.parent.absolute()
-    expected_onnx_model_dir = file.with_suffix('.onnx')
-    if not os.path.exists(expected_onnx_model_dir):
+    expected_onnx_model_file = file.with_suffix('.onnx')
+    if not os.path.exists(expected_onnx_model_file):
         LOGGER.warning("Attempting to copy onnx model "
-                       f"file from {expected_onnx_model_dir},"
+                       f"file from {expected_onnx_model_file},"
                        "but the file does not exits.")
         return
     else:
@@ -451,9 +451,9 @@ def create_deployment_folder(file):
         LOGGER.info(f"Created deployment folder at {deployment_folder_dir}")
 
         # copy over model onnx
-        deployment_onnx_model_dir = os.path.join(deployment_folder_dir, os.path.basename(expected_onnx_model_dir))
-        shutil.copyfile(expected_onnx_model_dir, deployment_onnx_model_dir)
-        LOGGER.info(f"Saved model.onnx in the deployment folder at {deployment_onnx_model_dir}")
+        deployment_onnx_model_file = os.path.join(deployment_folder_dir, os.path.basename(expected_onnx_model_file))
+        shutil.copyfile(expected_onnx_model_file, deployment_onnx_model_file)
+        LOGGER.info(f"Saved model.onnx in the deployment folder at {deployment_onnx_model_file}")
 
 
 def create_checkpoint(epoch, final_epoch, model, optimizer, ema, sparseml_wrapper, **kwargs):
