@@ -78,6 +78,7 @@ LOCAL_ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(LOCAL_ROOT) not in sys.path:
     sys.path.append(str(LOCAL_ROOT))  # add ROOT to PATH
 LOCAL_ROOT = Path(os.path.relpath(LOCAL_ROOT, Path.cwd()))  # relative
+MODEL_ONNX_NAME = "model.onnx"
 
 def export_formats():
     # YOLOv5 export formats
@@ -122,7 +123,7 @@ def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorst
         import onnx
 
         LOGGER.info(f'\n{prefix} starting export with onnx {onnx.__version__}...')
-        f = file.with_suffix('.onnx')
+        f = Path(os.path.join(file.parent), MODEL_ONNX_NAME)
 
         # export through SparseML so quantized and pruned graphs can be corrected
         save_dir = f.parent.absolute()
