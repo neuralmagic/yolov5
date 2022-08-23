@@ -436,7 +436,7 @@ def export_tfjs(keras_model, im, file, prefix=colorstr('TensorFlow.js:')):
 
 
 def create_deployment_folder(file):
-    model_root_dir = file.parent.absolute()
+    model_root_dir = file.parent.parent.absolute()
     expected_onnx_model_file = file.with_suffix('.onnx')
     if not os.path.exists(expected_onnx_model_file):
         LOGGER.warning("Attempting to copy onnx model "
