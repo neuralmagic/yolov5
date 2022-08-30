@@ -748,8 +748,8 @@ def parse_opt(known = False, skip_parse = False):
     parser.add_argument("--no_convert_qat",
                         action="store_true",
                         help = (
-                            "if True, exports of torch QAT graphs will be converted "
-                            "to a fully quantized representation. Default is True "
+                            "if specified, exports of torch QAT graphs will skip conversion "
+                            "to a fully quantized representation. Default is False "
                             )
                         )
     if skip_parse:
