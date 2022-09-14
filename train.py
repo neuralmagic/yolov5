@@ -31,12 +31,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import SGD, Adam, AdamW, lr_scheduler
 from tqdm import tqdm
 
-FILE = Path(__file__).resolve()
-ROOT = FILE.parents[0]  # YOLOv5 root directory
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))  # add ROOT to PATH
-ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
-
 import val  # for end-of-epoch mAP
 from export import load_checkpoint, create_checkpoint, load_teacher
 from models.yolo import Model
@@ -44,7 +38,7 @@ from utils.autoanchor import check_anchors
 from utils.autobatch import check_train_batch_size
 from utils.callbacks import Callbacks
 from utils.datasets import create_dataloader
-from utils.general import (LOGGER, check_dataset, check_file, check_git_status, check_img_size, check_requirements,
+from utils.general import (LOGGER, ROOT, check_dataset, check_file, check_git_status, check_img_size, check_requirements,
                            check_suffix, check_yaml, colorstr, get_latest_run, increment_path, init_seeds,
                            labels_to_class_weights, labels_to_image_weights, methods, one_cycle,
                            print_args, print_mutation, strip_optimizer)
@@ -56,6 +50,13 @@ from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
 from utils.sparse import SparseMLWrapper
 
+
+FILE = Path(__file__).resolve()
+LOCAL_ROOT = FILE.parents[0]  # YOLOv5 root directory
+if str(LOCAL_ROOT) not in sys.path:
+    sys.path.append(str(LOCAL_ROOT))  # add ROOT to PATH
+LOCAL_ROOT = Path(os.path.relpath(LOCAL_ROOT, Path.cwd()))  # relative
+
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
@@ -66,8 +67,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
           device,
           callbacks
           ):
-    save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze = \
-        Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
+    save_dir, epochs, batch_size, weights, single_cls, evolve, data, data_path, cfg, resume, noval, nosave, workers, freeze = \
+        Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.data_path, opt.cfg, \
         opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
 
     # Directories
@@ -107,7 +108,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     half_precision = cuda
     init_seeds(1 + RANK)
     with torch_distributed_zero_first(LOCAL_RANK):
-        data_dict = data_dict or check_dataset(data)  # check if None
+        data_dict = data_dict or check_dataset(data, data_path)  # check if None
     train_path, val_path = data_dict['train'], data_dict['val']
     nc = 1 if single_cls else int(data_dict['nc'])  # number of classes
     names = ['item'] if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
@@ -129,6 +130,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             resume=opt.resume, 
             rank=LOCAL_RANK,
             one_shot=opt.one_shot,
+            max_train_steps=opt.max_train_steps,
             )
         ckpt, state_dict, sparseml_wrapper = extras['ckpt'], extras['state_dict'], extras['sparseml_wrapper']
         LOGGER.info(extras['report'])
@@ -139,6 +141,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             model,
             None,
             opt.recipe,
+            train_mode=True,
             steps_per_epoch=opt.max_train_steps,
             one_shot=opt.one_shot,
         )
@@ -163,8 +166,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         loggers.on_params_update({"batch_size": batch_size})
 
     # Optimizer
-    nbs = 64  # nominal batch size
-    accumulate = max(round(nbs / batch_size), 1)  # accumulate loss before optimizing
+    nbs = batch_size*opt.gradient_accum_steps   # nominal batch size
+    accumulate = opt.gradient_accum_steps  # accumulate loss before optimizing
     hyp['weight_decay'] *= batch_size * accumulate / nbs  # scale weight_decay
     LOGGER.info(f"Scaled weight_decay = {hyp['weight_decay']}")
 
@@ -312,19 +315,11 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             "date": datetime.now().isoformat(),
         }
         ckpt = create_checkpoint(
-            -1, model, optimizer, ema, sparseml_wrapper, **ckpt_extras
+            -1, True, model, optimizer, ema, sparseml_wrapper, **ckpt_extras
         )
         one_shot_checkpoint_name = w / "checkpoint-one-shot.pt"
         torch.save(ckpt, one_shot_checkpoint_name)
         LOGGER.info(f"One shot checkpoint saved to {one_shot_checkpoint_name}")
-
-        if opt.num_export_samples > 0:
-            dataloader = val_loader or train_loader
-            sparseml_wrapper.save_sample_inputs_outputs(
-                dataloader=dataloader,
-                num_export_samples=opt.num_export_samples,
-                save_dir=str(w),
-            )
 
         del ckpt
 
@@ -455,8 +450,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
             if 0 < opt.max_train_steps <= train_steps_executed:
 
-                pbar.update(1)
-                pbar.close()
+                if RANK in [-1, 0]:
+                    pbar.update(1)
+                    pbar.close()
                 break
             # end batch ------------------------------------------------------------------------------------------------
 
@@ -497,7 +493,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                'best_fitness': best_fitness,
                                'wandb_id': loggers.wandb.wandb_run.id if loggers.wandb else None,
                                'date': datetime.now().isoformat()}
-                ckpt = create_checkpoint(epoch, model, optimizer, ema, sparseml_wrapper, **ckpt_extras)
+                ckpt = create_checkpoint(epoch, final_epoch, model, optimizer, ema, sparseml_wrapper, **ckpt_extras)
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
@@ -553,27 +549,23 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         callbacks.run('on_train_end', last, best, plots, epoch, results)
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
 
-    if opt.num_export_samples > 0:
-        sparseml_wrapper.save_sample_inputs_outputs(
-            dataloader=val_loader or train_loader,
-            num_export_samples=opt.num_export_samples,
-            save_dir=str(w),
-        )
 
     torch.cuda.empty_cache()
     return results
 
 
-def parse_opt(known=False, default_project_dir = None):
+def parse_opt(known=False, skip_parse=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
     parser.add_argument('--teacher_weights', type=str, default='', help='teacher weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--teacher_cfg', type=str, default='', help='teacher_model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
+    parser.add_argument('--data-path', type=str, default= '', help='path to dataset to overwrite the path in dataset.yaml')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
+    parser.add_argument('--gradient-accum-steps', type=int, default=1, help="Number of gradient accumulation steps")
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', 
@@ -594,13 +586,13 @@ def parse_opt(known=False, default_project_dir = None):
     parser.add_argument('--optimizer', type=str, choices=['SGD', 'Adam', 'AdamW'], default='SGD', help='optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
     parser.add_argument('--workers', type=int, default=8, help='max dataloader workers (per RANK in DDP mode)')
-    parser.add_argument('--project', default=(default_project_dir or ROOT) / 'runs/train', help='save to project/name')
+    parser.add_argument('--project', default= 'yolov5_runs/train', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     parser.add_argument('--cos-lr', action='store_true', help='cosine LR scheduler')
     parser.add_argument('--label-smoothing', type=float, default=0.0, help='Label smoothing epsilon')
-    parser.add_argument('--patience', type=int, default=100, help='EarlyStopping patience (epochs without improvement)')
+    parser.add_argument('--patience', type=int, default=0, help='EarlyStopping patience (epochs without improvement)')
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone=10, first3=0 1 2')
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
@@ -619,9 +611,14 @@ def parse_opt(known=False, default_project_dir = None):
     parser.add_argument("--max-eval-steps", type=int, default=-1, help="Set the maximum number of eval steps per epoch. if negative,"
                                                                         "the entire dataset will be used, default=-1")
     parser.add_argument("--one-shot", action="store_true", default=False, help="Apply recipe in one shot manner")
-    parser.add_argument("--num-export-samples", type=int, default=0, help="The number of sample inputs/outputs to export, default=0")
 
-    opt = parser.parse_known_args()[0] if known else parser.parse_args()
+    if skip_parse:
+        opt = parser.parse_args([])
+    elif known:
+        opt = parser.parse_known_args()[0]
+    else:
+        opt = parser.parse_args()
+
     return opt
 
 
@@ -760,7 +757,7 @@ def main(opt, callbacks=Callbacks()):
 
 def run(**kwargs):
     # Usage: import train; train.run(data='coco128.yaml', imgsz=320, weights='yolov5m.pt')
-    opt = parse_opt(True)
+    opt = parse_opt(known = True) if not kwargs else parse_opt(skip_parse = True)
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
