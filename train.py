@@ -629,6 +629,11 @@ def main(opt, callbacks=Callbacks()):
         check_requirements(exclude=['thop'])
 
     # Resume
+    if opt.teacher_cfg is not None:
+        opt.teacher_cfg = check_yaml(opt.teacher_cfg)
+    if opt.teacher_weights is not None:
+        opt.teacher_weights = str(opt.teacher_weights)
+
     if opt.resume and not check_wandb_resume(opt) and not opt.evolve:  # resume an interrupted run
         ckpt = opt.resume if isinstance(opt.resume, str) else get_latest_run()  # specified or most recent path
         assert os.path.isfile(ckpt), 'ERROR: --resume checkpoint does not exist'
