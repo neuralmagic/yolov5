@@ -11,6 +11,7 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 from sparseml.pytorch.sparsification.quantization import QuantizationModifier
 import torchvision.transforms.functional as F
 
+from utils.plots import feature_visualization
 from utils.torch_utils import is_parallel
 import torch.nn as nn
 import torch
@@ -49,6 +50,58 @@ def check_download_sparsezoo_weights(path):
         return [check_download_sparsezoo_weights(p) for p in path]
 
     return path
+
+def _replace_forward(model, mode):
+    def _forward_with_feature(self, x, profile=False, visualize=False):
+        y, dt = [], []  # outputs
+        output = {}
+        for m in self.model:
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            if profile:
+                self._profile_one_layer(m, x, dt)
+            if m.__class__.__name__ == "Detect":
+                if isinstance(x, list):
+                    output["feature"] = [torch.clone(xl) for xl in x]
+                else:
+                    output["feature"] = torch.clone(x)
+            x = m(x)  # run
+            y.append(x if m.i in self.save else None)  # save output
+            if visualize:
+                feature_visualization(x, m.type, m.i, save_dir=visualize)
+        output["output"] = x
+        return output
+
+    if mode == "student":
+        def _forward(self, x, augment=False, profile=False, visualize=False, with_feature=False):
+            if augment:
+                return self._forward_augment(x)
+            elif with_feature:
+                return self._forward_with_feature(x, profile, visualize)
+            else:
+                return self._forward_once(x, profile, visualize)
+    elif mode == "teacher":
+        def _forward(self, x):
+            return self._forward_with_feature(x)
+
+    if is_parallel(model):
+        model_forward_with_feature = _forward_with_feature.__get__(
+            model.module,
+            model.module.__class__,
+        )
+        setattr(model.module, "_forward_with_feature", model_forward_with_feature)
+
+        model_forward = _forward.__get__(
+            model.module,
+            model.module.__class__,
+        )
+        setattr(model.module, "forward", model_forward)
+    else:
+        model_forward_with_feature = _forward_with_feature.__get__(model, model.__class__)
+        setattr(model, "_forward_with_feature", model_forward_with_feature)
+
+        model_forward = _forward.__get__(model, model.__class__)
+        setattr(model, "forward", model_forward)
 
 
 class SparseMLWrapper(object):
@@ -141,79 +194,15 @@ class SparseMLWrapper(object):
         }
 
         if self.manager.feature_distillation_modifiers:
-            def student_forward(self, x, augment=False, profile=False, visualize=False, with_feature=False):
-                if augment:
-                    return self._forward_augment(x)
-                elif with_feature:
-                    return self._forward_with_feature(x, profile, visualize)
-                else:
-                    return self._forward_once(x, profile, visualize)
+            _replace_forward(self.model, "student")
+            _replace_forward(teacher_model, "teacher")
 
-            def teacher_forward(self, x):
-                return self._forward_with_feature(x)
-
-            def _forward_with_feature(self, x, profile=False, visualize=False):
-                y, dt = [], []  # outputs
-                output = {}
-                for m in self.model:
-                    if m.f != -1:  # if not from previous layer
-                        x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
-                    if profile:
-                        self._profile_one_layer(m, x, dt)
-                    if m.__class__.__name__ == "Detect":
-                        if isinstance(x, list):
-                            output["feature"] = [torch.clone(xl) for xl in x]
-                        else:
-                            output["feature"] = torch.clone(x)
-                    x = m(x)  # run
-                    y.append(x if m.i in self.save else None)  # save output
-                    if visualize:
-                        feature_visualization(x, m.type, m.i, save_dir=visualize)
-                output["output"] = x
-                return output
-
-            if is_parallel(self.model):
-                model_forward_with_feature = _forward_with_feature.__get__(
-                    self.model.module,
-                    self.model.module.__class__,
-                )
-                setattr(self.model.module, "_forward_with_feature", model_forward_with_feature)
-
-                model_forward = student_forward.__get__(
-                    self.model.module,
-                    self.model.module.__class__,
-                )
-                setattr(self.model.module, "forward", model_forward)
-            else:
-                model_forward_with_feature = _forward_with_feature.__get__(self.model, self.model.__class__)
-                setattr(self.model, "_forward_with_feature", model_forward_with_feature)
-
-                model_forward = student_forward.__get__(self.model, self.model.__class__)
-                setattr(self.model, "forward", model_forward)
-
-            if is_parallel(teacher_model):
-                teacher_model_forward_with_feature = _forward_with_feature.__get__(
-                    teacher_model.module,
-                    teacher_model.module.__class__,
-                )
-                setattr(teacher_model.module, "_forward_with_feature", teacher_model_forward_with_feature)
-
-                teacher_model_forward = teacher_forward.__get__(
-                    teacher_model.module,
-                    teacher_model.module.__class__,
-                )
-                setattr(teacher_model.module, "forward", teacher_model_forward)
-            else:
-                teacher_model_forward_with_feature = _forward_with_feature.__get__(
-                    teacher_model,
-                    teacher_model.__class__,
-                )
-                setattr(teacher_model, "_forward_with_feature", teacher_model_forward_with_feature)
-
-                teacher_model_forward = teacher_forward.__get__(teacher_model, teacher_model.__class__)
-                setattr(teacher_model, "forward", teacher_model_forward)
-
-        self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler)
+        self.manager.initialize(
+            self.model,
+            start_epoch,
+            grad_sampler=grad_sampler,
+            distillation_teacher=teacher_model
+        )
         self.start_epoch = start_epoch
         self.optimizer = optimizer
 
