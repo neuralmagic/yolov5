@@ -355,7 +355,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Continue as expected
     if RANK in [-1, 0]:
         sparseml_wrapper.initialize_loggers(loggers.logger, loggers.tb, loggers.wandb)
-    scaler = sparseml_wrapper.modify(scaler, train_loader)
+    scaler = sparseml_wrapper.modify(scaler, optimizer, model, train_loader)
     scheduler = sparseml_wrapper.check_lr_override(scheduler, RANK)
     epochs = sparseml_wrapper.check_epoch_override(epochs, RANK)
 
