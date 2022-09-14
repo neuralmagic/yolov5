@@ -1,6 +1,5 @@
 import logging
 import math
-from copy import deepcopy
 import random
 import os
 from typing import Any, Dict, Optional
@@ -127,7 +126,6 @@ class SparseMLWrapper(object):
         self.one_shot = one_shot
         self.train_recipe = train_recipe
         self.original_compute_loss = None
-        self.optimizer = None
 
         self.apply_checkpoint_structure(train_mode, epoch, one_shot)
 
