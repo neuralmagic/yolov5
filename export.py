@@ -50,6 +50,7 @@ import platform
 import subprocess
 import sys
 import time
+import shutil
 import warnings
 from pathlib import Path
 import math
@@ -62,24 +63,23 @@ from torch.utils.mobile_optimizer import optimize_for_mobile
 from sparseml.pytorch.utils import ModuleExporter
 from sparseml.pytorch.sparsification.quantization import skip_onnx_input_quantize
 
-FILE = Path(__file__).resolve()
-ROOT = FILE.parents[0]  # YOLOv5 root directory
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))  # add ROOT to PATH
-ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
-
 from models.common import Conv, DetectMultiBackend
 from models.experimental import attempt_load
 from models.yolo import Detect, Model
 from utils.activations import SiLU
 from utils.datasets import LoadImages
-from utils.general import (LOGGER, check_dataset, check_img_size, check_requirements, check_version, colorstr,
+from utils.general import (LOGGER, ROOT, check_dataset, check_img_size, check_requirements, check_version, colorstr,
                            file_size, print_args, url2file, intersect_dicts)
 from utils.torch_utils import select_device, torch_distributed_zero_first, is_parallel
 from utils.downloads import attempt_download
 from utils.sparse import SparseMLWrapper, check_download_sparsezoo_weights
+from utils.datasets import create_dataloader
 
-
+FILE = Path(__file__).resolve()
+LOCAL_ROOT = FILE.parents[0]  # YOLOv5 root directory
+if str(LOCAL_ROOT) not in sys.path:
+    sys.path.append(str(LOCAL_ROOT))  # add ROOT to PATH
+LOCAL_ROOT = Path(os.path.relpath(LOCAL_ROOT, Path.cwd()))  # relative
 
 def export_formats():
     # YOLOv5 export formats
@@ -117,7 +117,7 @@ def export_torchscript(model, im, file, optimize, prefix=colorstr('TorchScript:'
         LOGGER.info(f'{prefix} export failure: {e}')
 
 
-def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorstr('ONNX:')):
+def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorstr('ONNX:'), convert_qat=True):
     # YOLOv5 ONNX export
     try:
         check_requirements(('onnx',))
@@ -147,7 +147,7 @@ def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorst
         output_names = [f'out_{i}' for i in range(num_outputs)]
         dynamic_axes = {k: {0: 'batch'} for k in (input_names + output_names)} if dynamic else None
         exporter = ModuleExporter(model, save_dir)
-        exporter.export_onnx(im, name=save_name, convert_qat=True,
+        exporter.export_onnx(im, name=save_name, convert_qat=convert_qat,
                                 input_names=input_names, output_names=output_names, dynamic_axes=dynamic_axes)
         try:
             skip_onnx_input_quantize(str(f), str(f))
@@ -434,7 +434,29 @@ def export_tfjs(keras_model, im, file, prefix=colorstr('TensorFlow.js:')):
     except Exception as e:
         LOGGER.info(f'\n{prefix} export failure: {e}')
 
-def create_checkpoint(epoch, model, optimizer, ema, sparseml_wrapper, **kwargs):
+
+def create_deployment_folder(file):
+    model_root_dir = file.parent.parent.absolute()
+    expected_onnx_model_file = file.with_suffix('.onnx')
+    if not os.path.exists(expected_onnx_model_file):
+        LOGGER.warning("Attempting to copy onnx model "
+                       f"file from {expected_onnx_model_file},"
+                       "but the file does not exits.")
+        return
+    else:
+        deployment_folder_dir = os.path.join(model_root_dir, "deployment")
+        if os.path.isdir(deployment_folder_dir):
+            shutil.rmtree(deployment_folder_dir)
+        os.makedirs(deployment_folder_dir)
+        LOGGER.info(f"Created deployment folder at {deployment_folder_dir}")
+
+        # copy over model onnx
+        deployment_onnx_model_file = os.path.join(deployment_folder_dir, os.path.basename(expected_onnx_model_file))
+        shutil.copyfile(expected_onnx_model_file, deployment_onnx_model_file)
+        LOGGER.info(f"Saved model.onnx in the deployment folder at {deployment_onnx_model_file}")
+
+
+def create_checkpoint(epoch, final_epoch, model, optimizer, ema, sparseml_wrapper, **kwargs):
     pickle = not sparseml_wrapper.qat_active(math.inf if epoch <0 else epoch)  # qat does not support pickled exports
     ckpt_model = deepcopy(model.module if is_parallel(model) else model).float()
     yaml = ckpt_model.yaml
@@ -447,7 +469,7 @@ def create_checkpoint(epoch, model, optimizer, ema, sparseml_wrapper, **kwargs):
             'yaml': yaml,
             'hyp': model.hyp,
             **ema.state_dict(pickle),
-            **sparseml_wrapper.state_dict(),
+            **sparseml_wrapper.state_dict(final_epoch),
             **kwargs}
 
 def load_checkpoint(
@@ -464,12 +486,18 @@ def load_checkpoint(
     resume=None, 
     rank=-1,
     one_shot=False,
+    max_train_steps=-1,
     ):
     with torch_distributed_zero_first(rank):
+
         # download if not found locally or from sparsezoo if stub
         weights = attempt_download(weights) or check_download_sparsezoo_weights(weights)
     ckpt = torch.load(weights[0] if isinstance(weights, list) or isinstance(weights, tuple)
                       else weights, map_location="cpu")  # load checkpoint
+
+    # temporary fix until SparseML and ZooModels are updated
+    ckpt['checkpoint_recipe'] = ckpt.get('recipe') or ckpt.get('checkpoint_recipe')
+
     pickled = isinstance(ckpt['model'], nn.Module)
     train_type = type_ == 'train'
     ensemble_type = type_ == 'ensemble'
@@ -491,6 +519,12 @@ def load_checkpoint(
                       anchors=hyp.get('anchors') if hyp else None).to(device)
         model_key = 'ema' if (not train_type and 'ema' in ckpt and ckpt['ema']) else 'model'
         state_dict = ckpt[model_key].float().state_dict() if pickled else ckpt[model_key]
+
+        # backwards compatability for sparsezoo models that maintain anchor grid in state dict
+        anchor_grid_key = [key for key in state_dict.keys() if "anchor_grid" in key]
+        if len(anchor_grid_key) == 1:
+            _ = [state_dict.pop(key) for key in anchor_grid_key]
+
         if val_type:
             model = DetectMultiBackend(model=model, device=device, dnn=dnn, data=data, fp16=half)
 
@@ -501,20 +535,22 @@ def load_checkpoint(
     # load sparseml recipe for applying pruning and quantization
     checkpoint_recipe = train_recipe = None
     if resume:
-        train_recipe = ckpt.get('recipe')
-    elif recipe or ckpt.get('recipe'):
-        train_recipe, checkpoint_recipe = recipe, ckpt.get('recipe')
+        train_recipe, checkpoint_recipe = ckpt.get('train_recipe'), ckpt.get('checkpoint_recipe')
+    elif recipe or ckpt.get('checkpoint_recipe'):
+        train_recipe, checkpoint_recipe = recipe, ckpt.get('checkpoint_recipe')
 
     sparseml_wrapper = SparseMLWrapper(
         model.model if val_type else model,
         checkpoint_recipe,
         train_recipe,
+        train_mode=train_type,
+        epoch=ckpt['epoch'],
         one_shot=one_shot,
+        steps_per_epoch=max_train_steps,
     )
     exclude_anchors = not ensemble_type and (cfg or hyp.get('anchors')) and not resume
     loaded = False
 
-    sparseml_wrapper.apply_checkpoint_structure()
     if train_type:
         # intialize the recipe for training and restore the weights before if no quantized weights
         quantized_state_dict = any([name.endswith('.zero_point') for name in state_dict.keys()])
@@ -568,6 +604,7 @@ def load_state_dict(model, state_dict, run_mode, exclude_anchors):
 
 @torch.no_grad()
 def run(data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
+        data_path='', # optional data path to overwrite one written in .yaml data file
         weights=ROOT / 'yolov5s.pt',  # weights path
         imgsz=(640, 640),  # image (height, width)
         batch_size=1,  # batch size
@@ -590,6 +627,8 @@ def run(data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
         iou_thres=0.45,  # TF.js NMS: IoU threshold
         conf_thres=0.25,  # TF.js NMS: confidence threshold
         remove_grid=False,
+        num_export_samples = 0, # number of data samples to generate
+        no_convert_qat=False,
         ):
     t = time.time()
     include = [x.lower() for x in include]  # to lowercase
@@ -644,11 +683,27 @@ def run(data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
     if engine:  # TensorRT required before ONNX
         f[1] = export_engine(model, im, file, train, half, simplify, workspace, verbose)
     if onnx or xml:  # OpenVINO requires ONNX
-        f[2] = export_onnx(model, im, file, opset, train, dynamic, simplify)
+        f[2] = export_onnx(model, im, file, opset, train, dynamic, simplify, convert_qat = (not no_convert_qat))
     if xml:  # OpenVINO
         f[3] = export_openvino(model, im, file)
     if coreml:
         _, f[4] = export_coreml(model, im, file)
+
+    # Sample data Exports
+    if num_export_samples > 0:
+        LOGGER.info(f"\n{colorstr('Exporting data samples:')} {num_export_samples} in total.")
+        # Image size
+        gs = max(int(model.stride.max()), 32)  # grid size (max stride)
+        if isinstance(imgsz, list):
+            imgsz = imgsz[0]
+
+        val_loader = create_dataloader(path=check_dataset(data, data_path)['val'], imgsz=imgsz, batch_size=batch_size, stride=gs)[0]
+        sparseml_wrapper.save_sample_inputs_outputs(
+            dataloader=val_loader,
+            num_export_samples=num_export_samples,
+            save_dir= os.path.dirname(file),
+            image_size=imgsz,
+        )
 
     # TensorFlow Exports
     if any((saved_model, pb, tflite, edgetpu, tfjs)):
@@ -667,6 +722,10 @@ def run(data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
         if tfjs:
             f[9] = export_tfjs(model, im, file)
 
+    # Setup deployment folder
+    if 'onnx' in include:
+        create_deployment_folder(file)
+
     # Finish
     f = [str(x) for x in f if x]  # filter out '' and None
     if any(f):
@@ -679,10 +738,12 @@ def run(data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
     return f  # return list of exported files/dirs
 
 
-def parse_opt(known = False):
+def parse_opt(known = False, skip_parse = False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
+    parser.add_argument('--data-path', type=str, default= '', help='path to dataset to overwrite the path in dataset.yaml')
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model.pt path(s)')
+    parser.add_argument('--num-export-samples', type=int, default=0, help='number of sample inputs/outputs to export')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640, 640], help='image (h, w)')
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')
     parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
@@ -706,7 +767,20 @@ def parse_opt(known = False):
     parser.add_argument('--include', nargs='+',
                         default=['torchscript', 'onnx'],
                         help='torchscript, onnx, openvino, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs')
-    opt = parser.parse_args()
+    parser.add_argument("--no_convert_qat",
+                        action="store_true",
+                        help = (
+                            "if specified, exports of torch QAT graphs will skip conversion "
+                            "to a fully quantized representation. Default is False "
+                            )
+                        )
+    if skip_parse:
+        opt = parser.parse_args([])
+    elif known:
+        opt = parser.parse_known_args()[0]
+    else:
+        opt = parser.parse_args()
+
     print_args(FILE.stem, opt)
     return opt
 
@@ -716,7 +790,7 @@ def main(opt):
         run(**vars(opt))
 
 def export_run(**kwargs):
-    opt = parse_opt(True)
+    opt = parse_opt(known = True) if not kwargs else parse_opt(skip_parse = True)
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
