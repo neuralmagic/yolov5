@@ -1,18 +1,17 @@
-import copy
 import logging
 import math
 from copy import deepcopy
 import random
 import os
-from typing import Optional, Iterable
-
-from sparsezoo import Zoo
+from typing import Any, Dict, Optional
+from re import search
+from sparsezoo import Model
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
-from sparseml.pytorch.utils import GradSampler
+from sparseml.pytorch.sparsification.quantization import QuantizationModifier
+import torchvision.transforms.functional as F
 
-from utils.torch_utils import is_parallel, de_parallel
-from utils.plots import feature_visualization
+from utils.torch_utils import is_parallel
 import torch.nn as nn
 import torch
 import numpy
@@ -20,17 +19,18 @@ import numpy
 _LOGGER = logging.getLogger(__file__)
 
 def _get_model_framework_file(model, path):
-    transfer_request = 'recipe_type=transfer' in path
-    checkpoint_available = any([file.checkpoint for file in model.framework_files])
-    final_available = any([not file.checkpoint for file in model.framework_files])
+    available_files = model.training.default.files
+    transfer_request = search("recipe(.*)transfer", path)
+    checkpoint_available = any([".ckpt" in file.name for file in available_files])
+    final_available = any([not ".ckpt" in file.name for file in available_files])
 
     if transfer_request and checkpoint_available:
         # checkpoints are saved for transfer learning use cases,
-        # return checkpoint if avaiable and requested
-        return [file for file in model.framework_files if file.checkpoint][0]
+        # return checkpoint if available and requested
+        return [file for file in available_files if ".ckpt" in file.name][0]
     elif final_available:
         # default to returning final state, if available
-        return [file for file in model.framework_files if not file.checkpoint][0]
+        return [file for file in available_files if ".ckpt" not in file.name][0]
 
     raise ValueError(f"Could not find a valid framework file for {path}")
 
@@ -39,9 +39,9 @@ def check_download_sparsezoo_weights(path):
     if isinstance(path, str):
         if path.startswith("zoo:"):
             # load model from the SparseZoo and override the path with the new download
-            model = Zoo.load_model_from_stub(path)
+            model = Model(path)
             file = _get_model_framework_file(model, path)
-            path = file.downloaded_path()
+            path = file.path
 
         return path
 
@@ -50,14 +50,17 @@ def check_download_sparsezoo_weights(path):
 
     return path
 
+
 class SparseMLWrapper(object):
     def __init__(
-            self,
-            model,
-            checkpoint_recipe,
-            train_recipe,
-            steps_per_epoch=-1,
-            one_shot=False,
+        self,
+        model,
+        checkpoint_recipe,
+        train_recipe,
+        train_mode=False,
+        epoch=-1,
+        steps_per_epoch=-1,
+        one_shot=False,
     ):
         self.enabled = bool(train_recipe)
         self.model = model.module if is_parallel(model) else model
@@ -71,23 +74,48 @@ class SparseMLWrapper(object):
         self.original_compute_loss = None
         self.optimizer = None
 
-        if self.one_shot:
-            self._apply_one_shot()
+        self.apply_checkpoint_structure(train_mode, epoch, one_shot)
 
-    def state_dict(self):
-        manager = (ScheduledModifierManager.compose_staged(self.checkpoint_manager, self.manager)
-        if self.checkpoint_manager and self.enabled else self.manager)
+    def state_dict(self, final_epoch):
+        if self.enabled and final_epoch:
+            checkpoint_recipe = (
+                str(ScheduledModifierManager.compose_staged(self.checkpoint_manager, self.manager))
+                if self.checkpoint_manager else str(self.manager)
+            )
+            train_recipe = None
+        else:
+            checkpoint_recipe = str(self.checkpoint_manager) if self.checkpoint_manager else None
+            train_recipe = str(self.manager) if self.manager else None
 
         return {
-            'recipe': str(manager) if self.enabled else None,
+            'checkpoint_recipe': checkpoint_recipe,
+            'train_recipe': train_recipe
         }
 
-    def apply_checkpoint_structure(self):
+    def apply_checkpoint_structure(self, train_mode, epoch, one_shot=False):
         if self.checkpoint_manager:
-            if is_parallel(self.model):
-                self.checkpoint_manager.apply_structure(self.model.module, math.inf)
+            # if checkpoint recipe has a QAT modifier and this is a transfer learning
+            # run then remove the QAT modifier from the manager
+            if train_mode:
+                qat_idx = next((
+                    idx for idx, mod in enumerate(self.checkpoint_manager.modifiers)
+                    if isinstance(mod, QuantizationModifier)), -1
+                    )
+                if qat_idx >= 0:
+                    _ = self.checkpoint_manager.modifiers.pop(qat_idx)
+
+            self.checkpoint_manager.apply_structure(self.model, math.inf)
+
+        if train_mode and epoch > 0 and self.enabled:
+            self.manager.apply_structure(self.model, epoch)
+        elif one_shot:
+            if self.enabled:
+                self.manager.apply(self.model)
+                _LOGGER.info(f"Applied recipe {self.train_recipe} in one-shot manner")
             else:
-                self.checkpoint_manager.apply_structure(self.model, math.inf)
+                _LOGGER.info(f"Training recipe for one-shot application not recognized by the manager. Got recipe: "
+                            f"{self.train_recipe}"
+                            )
 
     def initialize(
         self, 
@@ -103,10 +131,14 @@ class SparseMLWrapper(object):
         if not self.enabled:
             return
 
-        grad_sampler = GradSampler(
-            self._mfac_data_loader(train_loader, device, **train_loader_kwargs), 
-            lambda pred, target: compute_loss([p for p in pred[1]], target.to(device))[0]
-        )
+        grad_sampler = {
+            "data_loader_builder": self._get_data_loader_builder(
+                train_loader, device, **train_loader_kwargs
+            ),
+            "loss_function": lambda pred, target: compute_loss(
+                [p for p in pred[1]], target.to(device)
+            )[0],
+        }
 
         if self.manager.feature_distillation_modifiers:
             def student_forward(self, x, augment=False, profile=False, visualize=False, with_feature=False):
@@ -181,7 +213,7 @@ class SparseMLWrapper(object):
                 teacher_model_forward = teacher_forward.__get__(teacher_model, teacher_model.__class__)
                 setattr(teacher_model, "forward", teacher_model_forward)
 
-        self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler, distillation_teacher=teacher_model)
+        self.manager.initialize(self.model, start_epoch, grad_sampler=grad_sampler)
         self.start_epoch = start_epoch
         self.optimizer = optimizer
 
@@ -214,12 +246,12 @@ class SparseMLWrapper(object):
                 file.write(str(self.manager))
             wandb_logger.wandb.log_artifact(artifact)
 
-    def modify(self, scaler, dataloader):
+    def modify(self, scaler, optimizer, model, dataloader):
         if not self.enabled:
             return scaler
 
         self.steps_per_epoch = self.steps_per_epoch if self.steps_per_epoch > 0 else len(dataloader)
-        return self.manager.modify(self.model, self.optimizer, steps_per_epoch=self.steps_per_epoch, wrap_optim=scaler)
+        return self.manager.modify(model, optimizer, steps_per_epoch=self.steps_per_epoch, wrap_optim=scaler)
 
     def check_lr_override(self, scheduler, rank):
         # Override lr scheduler if recipe makes any LR updates
@@ -233,9 +265,9 @@ class SparseMLWrapper(object):
     def check_epoch_override(self, epochs, rank):
         # Override num epochs if recipe explicitly modifies epoch range
         if self.enabled and self.manager.epoch_modifiers and self.manager.max_epochs:
+            epochs = self.manager.max_epochs or epochs  # override num_epochs
             if rank in [0,-1]:
                 self.logger.info(f'Overriding number of epochs from SparseML manager to {epochs}')
-            epochs = self.manager.max_epochs + self.start_epoch or epochs  # override num_epochs
 
         return epochs
 
@@ -262,29 +294,42 @@ class SparseMLWrapper(object):
 
         return (pruning_start <= epoch <= pruning_end) or epoch == qat_start
 
-    def _mfac_data_loader(self, train_loader, device, multi_scale, img_size, grid_size):
-        def dataloader():
-            loader_type = type(train_loader)
-            mfac_dataloader = loader_type(
-                dataset=train_loader.dataset,
-                batch_size=train_loader.batch_size // 2,
-                sampler=deepcopy(train_loader.sampler),
-                num_workers=train_loader.num_workers,
-                collate_fn=train_loader.collate_fn,
-                pin_memory=train_loader.pin_memory,
-            )
+    def _get_data_loader_builder(
+        self, train_loader, device, multi_scale, img_size, grid_size
+    ):
+        def _data_loader_builder(kwargs: Optional[Dict[str, Any]] = None):
+            template = dict(train_loader.__dict__)
 
-            for imgs, targets, *_ in mfac_dataloader:
+            # drop attributes that will be auto-initialized
+            to_drop = [k for k in template if k.startswith("_") or k == "batch_sampler"]
+            for item in to_drop:
+                template.pop(item)
+
+            # override defaults if kwargs are given, for example via recipe
+            if kwargs:
+                template.update(kwargs)
+            data_loader = type(train_loader)(**template)
+
+            for imgs, targets, *_ in data_loader:
                 imgs = imgs.to(device, non_blocking=True).float() / 255
                 if multi_scale:
-                    sz = random.randrange(img_size * 0.5, img_size * 1.5 + grid_size) // grid_size * grid_size  # size
+                    sz = (
+                        random.randrange(img_size * 0.5, img_size * 1.5 + grid_size)
+                        // grid_size
+                        * grid_size
+                    )  # size
                     sf = sz / max(imgs.shape[2:])  # scale factor
                     if sf != 1:
-                        ns = [math.ceil(x * sf / grid_size) * grid_size for x in imgs.shape[2:]]  # new shape (stretched to gs-multiple)
-                        imgs = nn.functional.interpolate(imgs, size=ns, mode='bilinear', align_corners=False)
+                        ns = [
+                            math.ceil(x * sf / grid_size) * grid_size
+                            for x in imgs.shape[2:]
+                        ]  # new shape (stretched to gs-multiple)
+                        imgs = nn.functional.interpolate(
+                            imgs, size=ns, mode="bilinear", align_corners=False
+                        )
                 yield [imgs], {}, targets
-        return dataloader
-      
+        return _data_loader_builder
+
     def _apply_one_shot(self):
         if self.manager is not None:
             self.manager.apply(self.model)
@@ -298,9 +343,9 @@ class SparseMLWrapper(object):
         self,
         dataloader: "Dataloader",  # flake8 : noqa F8421
         num_export_samples=100,
-        save_dir: Optional[str] = None,
-    ):
-
+        save_dir: Optional[str]=None,
+        image_size: int=640,
+   ):
         save_dir = save_dir or ""
         if not dataloader:
             raise ValueError(
@@ -310,22 +355,30 @@ class SparseMLWrapper(object):
         device = "cuda" if torch.cuda.is_available() else "cpu"
         exported_samples = 0
 
-        sample_in_dir = os.path.join(save_dir, "sample-inputs")
-        sample_out_dir = os.path.join(save_dir, "sample-outputs")
+        sample_in_dir = os.path.join(save_dir, "sample_inputs")
+        sample_out_dir = os.path.join(save_dir, "sample_outputs")
 
         os.makedirs(sample_in_dir, exist_ok=True)
         os.makedirs(sample_out_dir, exist_ok=True)
+        model_was_in_train_mode = self.model.training
+        self.model.eval()
 
         for _, (images, _, _, _) in enumerate(dataloader):
             images = (
                 images.float() / 255
             )  # uint8 to float32, 0-255 to 0.0-1.0
+            images = F.resize(images, (image_size, image_size))
 
             device_imgs = images.to(device, non_blocking=True)
             outs = self.model(device_imgs)
 
             # Move to cpu for exporting
             ins = images.detach().to("cpu")
+
+            if isinstance(outs, tuple) and len(outs) > 1:
+                # flatten into a single list
+                outs = [outs[0], *outs[1]]
+
             outs = [elem.detach().to("cpu") for elem in outs]
             outs_gen = zip(*outs)
 
@@ -349,6 +402,10 @@ class SparseMLWrapper(object):
         _LOGGER.info(
             f"Exported {exported_samples} samples to {save_dir}"
         )
+
+        # reset model.training if needed
+        if model_was_in_train_mode:
+            self.model.train()
 
     def compute_loss(self, epoch, inputs, targets):
         if (
