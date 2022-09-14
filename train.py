@@ -526,12 +526,12 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         for f in last, best:
             if f.exists():
                 strip_optimizer(f)  # strip optimizers
-                if f is best:
+                if f is last:
                     LOGGER.info(f'\nValidating {f}...')
                     results, _, _ = val.run(data_dict,
                                             batch_size=batch_size // WORLD_SIZE * 2,
                                             imgsz=imgsz,
-                                            model=load_checkpoint(type_='ensemble', weights=best, device=device)[0],
+                                            model=load_checkpoint(type_='ensemble', weights=last, device=device)[0],
                                             iou_thres=0.65 if is_coco else 0.60,  # best pycocotools results at 0.65
                                             single_cls=single_cls,
                                             dataloader=val_loader,
@@ -560,7 +560,7 @@ def parse_opt(known=False, skip_parse=False):
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--teacher_cfg', type=str, default='', help='teacher_model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
-    parser.add_argument('--data-path', type=str, default='', help='path to dataset to overwrite the path in dataset.yaml')
+    parser.add_argument('--data-path', type=str, default= '', help='path to dataset to overwrite the path in dataset.yaml')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
