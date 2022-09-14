@@ -81,6 +81,7 @@ if str(LOCAL_ROOT) not in sys.path:
     sys.path.append(str(LOCAL_ROOT))  # add ROOT to PATH
 LOCAL_ROOT = Path(os.path.relpath(LOCAL_ROOT, Path.cwd()))  # relative
 
+
 def export_formats():
     # YOLOv5 export formats
     x = [['PyTorch', '-', '.pt', True],
@@ -472,6 +473,7 @@ def create_checkpoint(epoch, final_epoch, model, optimizer, ema, sparseml_wrappe
             **sparseml_wrapper.state_dict(final_epoch),
             **kwargs}
 
+
 def load_checkpoint(
     type_, 
     weights, 
@@ -487,11 +489,11 @@ def load_checkpoint(
     rank=-1,
     one_shot=False,
     max_train_steps=-1,
-    ):
+):
     with torch_distributed_zero_first(rank):
-
         # download if not found locally or from sparsezoo if stub
         weights = attempt_download(weights) or check_download_sparsezoo_weights(weights)
+
     ckpt = torch.load(weights[0] if isinstance(weights, list) or isinstance(weights, tuple)
                       else weights, map_location="cpu")  # load checkpoint
 
@@ -501,7 +503,7 @@ def load_checkpoint(
     pickled = isinstance(ckpt['model'], nn.Module)
     train_type = type_ == 'train'
     ensemble_type = type_ == 'ensemble'
-    val_type = type_ =='val'
+    val_type = type_ == 'val'
 
     if pickled and ensemble_type:
         cfg = None
@@ -552,7 +554,7 @@ def load_checkpoint(
     loaded = False
 
     if train_type:
-        # intialize the recipe for training and restore the weights before if no quantized weights
+        # initialize the recipe for training and restore the weights before if no quantized weights
         quantized_state_dict = any([name.endswith('.zero_point') for name in state_dict.keys()])
         if not quantized_state_dict:
             state_dict = load_state_dict(model, state_dict, run_mode=True, exclude_anchors=exclude_anchors)
@@ -574,6 +576,7 @@ def load_checkpoint(
         'report': report,
     }
 
+
 def load_teacher(weights, device, cfg, nc, rank):
     teacher_model, _ = load_checkpoint(
         type_='train',
@@ -590,6 +593,7 @@ def load_teacher(weights, device, cfg, nc, rank):
 
     return teacher_model
 
+
 def load_state_dict(model, state_dict, run_mode, exclude_anchors):
     # fix older state_dict names not porting to the new model setup
     state_dict = {key if not key.startswith("module.") else key[7:]: val for key, val in state_dict.items()}
@@ -601,6 +605,7 @@ def load_state_dict(model, state_dict, run_mode, exclude_anchors):
     model.load_state_dict(state_dict, strict=not run_mode)  # load
 
     return state_dict
+
 
 @torch.no_grad()
 def run(data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
@@ -789,12 +794,14 @@ def main(opt):
     for opt.weights in (opt.weights if isinstance(opt.weights, list) else [opt.weights]):
         run(**vars(opt))
 
+
 def export_run(**kwargs):
-    opt = parse_opt(known = True) if not kwargs else parse_opt(skip_parse = True)
+    opt = parse_opt(known=True) if not kwargs else parse_opt(skip_parse=True)
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
     return opt
+
 
 if __name__ == "__main__":
     opt = parse_opt()

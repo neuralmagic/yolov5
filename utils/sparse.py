@@ -19,6 +19,7 @@ import numpy
 
 _LOGGER = logging.getLogger(__file__)
 
+
 def _get_model_framework_file(model, path):
     available_files = model.training.default.files
     transfer_request = search("recipe(.*)transfer", path)
@@ -50,6 +51,7 @@ def check_download_sparsezoo_weights(path):
         return [check_download_sparsezoo_weights(p) for p in path]
 
     return path
+
 
 def _replace_forward(model, mode):
     def _forward_with_feature(self, x, profile=False, visualize=False):
@@ -194,7 +196,8 @@ class SparseMLWrapper(object):
 
         if self.manager.feature_distillation_modifiers:
             _replace_forward(self.model, "student")
-            _replace_forward(teacher_model, "teacher")
+            if teacher_model is not None:
+                _replace_forward(teacher_model, "teacher")
 
         self.manager.initialize(
             self.model,

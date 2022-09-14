@@ -120,7 +120,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     pretrained = weights.endswith('.pt') or weights.endswith('.pth') or weights.startswith('zoo:')
     if pretrained:
         model, extras = load_checkpoint(
-            type_ = 'train', 
+            type_='train',
             weights=weights, 
             device=device, 
             cfg=opt.cfg, 
@@ -560,7 +560,7 @@ def parse_opt(known=False, skip_parse=False):
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--teacher_cfg', type=str, default='', help='teacher_model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
-    parser.add_argument('--data-path', type=str, default= '', help='path to dataset to overwrite the path in dataset.yaml')
+    parser.add_argument('--data-path', type=str, default='', help='path to dataset to overwrite the path in dataset.yaml')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
