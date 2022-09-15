@@ -142,27 +142,52 @@ def process_batch(detections, labels, iouv):
     return correct
 
 
-def get_stride(model_path, image_shape=(640, 640)) -> int:
+def get_stride(yolo_pipeline: Pipeline) -> int:
     """
-    Infer strides from model file and image shape
+    Infer max stride from pipeline
 
-    :param model_path: Path to model file
-    :param image_shape: Tuple of ints representing the image shape
+    :param yolo_pipeline: pipeline to infer the max stride of
     """
-    model = onnx.load(model_path)
+    model = onnx.load(yolo_pipeline.onnx_file_path)
+    image_size = get_tensor_dim_shape(model.graph.input[0], 2)
+    if not image_size:
+        image_size = yolo_pipeline.image_size or 640
+        if not isinstance(image_size, int):
+            image_size = image_size[0]
 
-    grid_shapes = (
+    grid_shapes = list(
         get_tensor_dim_shape(model.graph.output[index], 2)
         for index in range(1, len(model.graph.output))
     )
 
-    strides = (image_shape[0] // grid_shape for grid_shape in grid_shapes)
+    def _infer_grid_shapes():
+        # build fake input
+        input_shape = [
+            yolo_pipeline.engine.batch_size,
+            get_tensor_dim_shape(model.graph.input[0], 1),
+            image_size,
+            image_size
+        ]
+        fake_input = np.random.randn(*input_shape).astype(
+            np.uint8 if yolo_pipeline.is_quantized else np.float32
+        )
+
+        # run sample forward pass and get grid shapes from output size
+        fake_outputs = yolo_pipeline.engine([fake_input])[1:]  # skip first output
+        return [output.shape[2] for output in fake_outputs]
+
+    if any(not grid_shape for grid_shape in grid_shapes):
+        # unable to get static output shape, infer from forward pass
+        grid_shapes = _infer_grid_shapes()
+
+    strides = (image_size // grid_shape for grid_shape in grid_shapes)
     return max(strides)
 
 
 @torch.no_grad()
 def run(
     data,
+    data_path='', # optional data path to overwrite one written in .yaml data file
     model_path=None,  # model.onnx path/ SparseZoo stub
     batch_size=32,  # batch size
     imgsz=640,  # inference size (pixels)
@@ -178,7 +203,7 @@ def run(
     save_hybrid=False,  # save label+prediction hybrid results to *.txt
     save_conf=False,  # save confidences in --save-txt labels
     save_json=False,  # save a COCO-JSON results file
-    project=LOCAL_ROOT / "runs/val",  # save to project/name
+    project=ROOT / "runs/val",  # save to project/name
     name="exp",  # save to project/name
     exist_ok=False,  # existing project/name ok, do not increment
     half=True,  # use FP16 half-precision inference
@@ -210,12 +235,12 @@ def run(
         batch_size=batch_size,
     )
 
-    stride = get_stride(model_path=yolo_pipeline.onnx_file_path, image_shape=(640, 640))
+    stride = get_stride(yolo_pipeline)
 
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
     # Data
-    data = check_dataset(data)  # check
+    data = check_dataset(data, data_path)  # check
 
     # Configure
     # Note: Only coco validation data is supported for now
@@ -494,7 +519,7 @@ def parse_opt():
         "--save-json", action="store_true", help="save a COCO-JSON results file"
     )
     parser.add_argument(
-        "--project", default=LOCAL_ROOT / "runs/val", help="save to project/name"
+        "--project", default=ROOT / "runs/val", help="save to project/name"
     )
     parser.add_argument("--name", default="exp", help="save to project/name")
     parser.add_argument(
@@ -535,7 +560,7 @@ def main(opt=None):
     if opt is None:
         opt = parse_opt()
     check_requirements(
-        requirements=ROOT / "requirements.txt", exclude=("tensorboard", "thop")
+        requirements=LOCAL_ROOT / "requirements.txt", exclude=("tensorboard", "thop")
     )
 
     if opt.task in ("train", "val", "test"):  # run normally

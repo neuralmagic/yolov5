@@ -10,13 +10,8 @@ from typing import Dict
 import yaml
 from tqdm import tqdm
 
-FILE = Path(__file__).resolve()
-ROOT = FILE.parents[3]  # YOLOv5 root directory
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))  # add ROOT to PATH
-
 from utils.datasets import LoadImagesAndLabels, img2label_paths
-from utils.general import LOGGER, check_dataset, check_file
+from utils.general import LOGGER, ROOT, check_dataset, check_file
 
 try:
     import wandb
@@ -40,7 +35,7 @@ def check_wandb_config_file(data_config_file):
     return data_config_file
 
 
-def check_wandb_dataset(data_file):
+def check_wandb_dataset(data_file, data_path):
     is_trainset_wandb_artifact = False
     is_valset_wandb_artifact = False
     if check_file(data_file) and data_file.endswith('.yaml'):
@@ -53,7 +48,7 @@ def check_wandb_dataset(data_file):
     if is_trainset_wandb_artifact or is_valset_wandb_artifact:
         return data_dict
     else:
-        return check_dataset(data_file)
+        return check_dataset(data_file, data_path)
 
 
 def get_run_info(run_path):
@@ -179,9 +174,9 @@ class WandbLogger():
                     if isinstance(opt.resume, str) and opt.resume.startswith(WANDB_ARTIFACT_PREFIX):
                         self.data_dict = dict(self.wandb_run.config.data_dict)
                     else:  # local resume
-                        self.data_dict = check_wandb_dataset(opt.data)
+                        self.data_dict = check_wandb_dataset(opt.data, opt.data_path)
                 else:
-                    self.data_dict = check_wandb_dataset(opt.data)
+                    self.data_dict = check_wandb_dataset(opt.data, opt.data_path)
                     self.wandb_artifact_data_dict = self.wandb_artifact_data_dict or self.data_dict
 
                     # write data_dict to config. useful for resuming from artifacts. Do this only when not resuming.
