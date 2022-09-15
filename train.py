@@ -349,6 +349,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             img_size=imgsz, 
             grid_size=gs,
             teacher_model=teacher_model,
+            optimizer=optimizer
         )
 
     # Continue as expected

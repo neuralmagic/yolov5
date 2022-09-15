@@ -177,6 +177,7 @@ class SparseMLWrapper(object):
         train_loader, 
         device,
         teacher_model,
+        optimizer,
         **train_loader_kwargs,
     ):
         self.original_compute_loss = compute_loss
@@ -204,6 +205,7 @@ class SparseMLWrapper(object):
             distillation_teacher=teacher_model
         )
         self.start_epoch = start_epoch
+        self.optimizer = optimizer
 
     def initialize_loggers(self, logger, tb_writer, wandb_logger):
         self.logger = logger
