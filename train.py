@@ -92,7 +92,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Loggers
     data_dict = None
     if RANK in [-1, 0]:
-        loggers = Loggers(Path(opt.log_directory) or save_dir, weights, opt, hyp, LOGGER)  # loggers instance
+        loggers = Loggers(Path(opt.log_directory or save_dir), weights, opt, hyp, LOGGER)  # loggers instance
         if loggers.wandb:
             data_dict = loggers.wandb.data_dict
             if resume:
