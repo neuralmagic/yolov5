@@ -200,20 +200,29 @@ class SparseMLWrapper(object):
 
         return qat_start < epoch + 1
 
-    def reset_best(self, epoch):
+    def get_best_save_names(self, epoch):
+        # return a list of the names to save a "best" model under
+
+        save_name_suffixes = ["best_overall"]
+
         if not self.enabled:
-            return False
+            return save_name_suffixes
 
-        # if pruning is active or quantization just started, need to reset best checkpoint
-        # this is in case the pruned and/or quantized model do not fully recover
         pruning_start = math.floor(max([mod.start_epoch for mod in self.manager.pruning_modifiers])) \
-            if self.manager.pruning_modifiers else -1
-        pruning_end = math.ceil(max([mod.end_epoch for mod in self.manager.pruning_modifiers])) \
-            if self.manager.pruning_modifiers else -1
+            if self.manager.pruning_modifiers else None
         qat_start = math.floor(max([mod.start_epoch for mod in self.manager.quantization_modifiers])) \
-            if self.manager.quantization_modifiers else -1
+            if self.manager.quantization_modifiers else None
 
-        return (pruning_start <= epoch <= pruning_end) or epoch == qat_start
+        if pruning_start and epoch >= pruning_start:
+            save_name_suffixes.append("best_pruned")
+
+        if qat_start and epoch >= qat_start:
+            if pruning_start and pruning_start <= epoch:
+                save_name_suffixes.append("best_pruned_quantized")
+            else:
+                save_name_suffixes.append("best_quantized")
+
+        return save_name_suffixes
 
     def _get_data_loader_builder(
         self, train_loader, device, multi_scale, img_size, grid_size

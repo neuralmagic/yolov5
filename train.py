@@ -74,7 +74,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Directories
     w = save_dir / 'weights'  # weights dir
     (w.parent if evolve else w).mkdir(parents=True, exist_ok=True)  # make dir
-    last, best = w / 'last.pt', w / 'best.pt'
+    last = w / 'last.pt'
 
     # Hyperparameters
     if isinstance(hyp, str):
@@ -207,7 +207,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Resume
     start_epoch = start_epoch or 0
-    best_fitness = 0.0
+    best_fitness = {}
     if pretrained:
         if opt.resume:
             assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (weights, epochs)
@@ -471,8 +471,14 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
-            if fi > best_fitness or sparseml_wrapper.reset_best(epoch):
-                best_fitness = fi
+            save_names = sparseml_wrapper.get_best_save_names(epoch)
+            for name in save_names:
+                if name not in best_fitness:
+                    best_fitness[name] = -1
+
+                if fi >= best_fitness[name]:
+                    best_fitness[name] = fi
+
             log_vals = list(mloss) + list(results) + lr
             callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
 
@@ -486,12 +492,13 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
-                if best_fitness == fi:
-                    torch.save(ckpt, best)
+                for name, value in best_fitness.items():
+                    if value == fi:
+                        torch.save(ckpt, f"{name}.pt")
                 if (epoch > 0) and (opt.save_period > 0) and (epoch % opt.save_period == 0):
                     torch.save(ckpt, w / f'epoch{epoch}.pt')
                 del ckpt
-                callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
+                callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness["best_overall"], fi)
 
             # Stop Single-GPU
             if RANK == -1 and stopper(epoch=epoch, fitness=fi):
@@ -513,7 +520,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         if opt.max_train_steps > 0:
             epochs_ = opt.max_train_steps / nb
         LOGGER.info(f'\n{epochs_} epochs completed in {(time.time() - t0) / 3600:.3f} hours.')
-        for f in last, best:
+        for f in list(best_fitness.keys()).append(last):
             if f.exists():
                 strip_optimizer(f)  # strip optimizers
                 if f is last:
@@ -533,9 +540,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                             compute_loss=compute_loss,  # val best model with plots
                                             half=half_precision)
                     if is_coco:
-                        callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness, fi)
+                        callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness["best_overall"], fi)
 
-        callbacks.run('on_train_end', last, best, plots, epoch, results)
+        callbacks.run('on_train_end', last, best_fitness["best_overall"], plots, epoch, results)
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
 
 
