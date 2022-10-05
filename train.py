@@ -74,7 +74,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Directories
     w = save_dir / 'weights'  # weights dir
     (w.parent if evolve else w).mkdir(parents=True, exist_ok=True)  # make dir
-    last = w / 'last.pt'
+    last, best = w / 'last.pt', w / "best_overall.pt"
 
     # Hyperparameters
     if isinstance(hyp, str):
@@ -480,7 +480,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                     best_fitness[name] = fi
 
             log_vals = list(mloss) + list(results) + lr
-            callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
+            callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness["best_overall"], fi)
 
             # Save model
             if (not opt.nosave) or (final_epoch and not opt.evolve):  # if save
@@ -494,7 +494,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 torch.save(ckpt, last)
                 for name, value in best_fitness.items():
                     if value == fi:
-                        torch.save(ckpt, f"{name}.pt")
+                        torch.save(ckpt, f"{w / name}.pt")
                 if (epoch > 0) and (opt.save_period > 0) and (epoch % opt.save_period == 0):
                     torch.save(ckpt, w / f'epoch{epoch}.pt')
                 del ckpt
@@ -520,7 +520,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         if opt.max_train_steps > 0:
             epochs_ = opt.max_train_steps / nb
         LOGGER.info(f'\n{epochs_} epochs completed in {(time.time() - t0) / 3600:.3f} hours.')
-        for f in list(best_fitness.keys()).append(last):
+        files_to_validate = [w / key for key in  best_fitness.keys()]
+        files_to_validate.append(last)
+        for f in files_to_validate:
             if f.exists():
                 strip_optimizer(f)  # strip optimizers
                 if f is last:
@@ -542,7 +544,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                     if is_coco:
                         callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness["best_overall"], fi)
 
-        callbacks.run('on_train_end', last, best_fitness["best_overall"], plots, epoch, results)
+        callbacks.run('on_train_end', last, best, plots, epoch, results)
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
 
 
