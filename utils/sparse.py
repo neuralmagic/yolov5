@@ -215,11 +215,21 @@ class SparseMLWrapper(object):
         qat_start = math.floor(max([mod.start_epoch for mod in self.manager.quantization_modifiers])) \
             if self.manager.quantization_modifiers else None
 
-        if pruning_start and pruning_start <= epoch and (epoch < pruning_end or qat_start is None):
+        if (
+            pruning_start is not None
+            and pruning_start <= epoch 
+            and (epoch < pruning_end or qat_start is None)
+        ):
             save_names.append("best_pruned")
 
-        if qat_start and epoch >= qat_start:
-            if pruning_start and pruning_start <= epoch:
+        if (
+            qat_start is not None
+            and epoch >= qat_start
+        ):
+            if (
+                pruning_start is not None
+                and pruning_start <= epoch
+            ):
                 save_names.append("best_pruned_quantized")
             else:
                 save_names.append("best_quantized")
