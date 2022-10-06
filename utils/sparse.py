@@ -203,10 +203,10 @@ class SparseMLWrapper(object):
     def get_best_save_names(self, epoch):
         # return a list of the names to save a "best" model under
 
-        save_name_suffixes = ["best_overall"]
+        save_names = ["best_overall"]
 
         if not self.enabled:
-            return save_name_suffixes
+            return save_names
 
         pruning_start = math.floor(max([mod.start_epoch for mod in self.manager.pruning_modifiers])) \
             if self.manager.pruning_modifiers else None
@@ -215,16 +215,16 @@ class SparseMLWrapper(object):
         qat_start = math.floor(max([mod.start_epoch for mod in self.manager.quantization_modifiers])) \
             if self.manager.quantization_modifiers else None
 
-        if pruning_start and pruning_start <= epoch < pruning_end:
-            save_name_suffixes.append("best_pruned")
+        if pruning_start and pruning_start <= epoch and (epoch < pruning_end or qat_start is None):
+            save_names.append("best_pruned")
 
         if qat_start and epoch >= qat_start:
             if pruning_start and pruning_start <= epoch:
-                save_name_suffixes.append("best_pruned_quantized")
+                save_names.append("best_pruned_quantized")
             else:
-                save_name_suffixes.append("best_quantized")
+                save_names.append("best_quantized")
 
-        return save_name_suffixes
+        return save_names
 
     def _get_data_loader_builder(
         self, train_loader, device, multi_scale, img_size, grid_size
