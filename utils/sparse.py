@@ -310,7 +310,7 @@ class SparseMLWrapper(object):
 
                 sample_input_filename = os.path.join(f"{sample_in_dir}", f"inp-{file_idx}.npz")
                 if save_inputs_as_uint8:
-                    sample_in = (255 * sample_in).astype(numpy.uint8)
+                    sample_in = (255 * sample_in).to(dtype=torch.uint8)
                 numpy.savez(sample_input_filename, sample_in)
 
                 sample_output_filename = os.path.join(f"{sample_out_dir}", f"out-{file_idx}.npz")
