@@ -111,6 +111,7 @@ class SparseMLWrapper(object):
         model,
         checkpoint_recipe,
         train_recipe,
+        recipe_args=None,
         train_mode=False,
         epoch=-1,
         steps_per_epoch=-1,
@@ -119,7 +120,7 @@ class SparseMLWrapper(object):
         self.enabled = bool(train_recipe)
         self.model = model.module if is_parallel(model) else model
         self.checkpoint_manager = ScheduledModifierManager.from_yaml(checkpoint_recipe) if checkpoint_recipe else None
-        self.manager = ScheduledModifierManager.from_yaml(train_recipe) if train_recipe else None
+        self.manager = ScheduledModifierManager.from_yaml(train_recipe, recipe_variables=recipe_args) if train_recipe else None
         self.logger = None
         self.start_epoch = None
         self.steps_per_epoch = steps_per_epoch
@@ -335,6 +336,7 @@ class SparseMLWrapper(object):
         num_export_samples=100,
         save_dir: Optional[str]=None,
         image_size: int=640,
+        save_inputs_as_uint8: bool = False,
    ):
         save_dir = save_dir or ""
         if not dataloader:
@@ -377,6 +379,8 @@ class SparseMLWrapper(object):
                 file_idx = f"{exported_samples}".zfill(4)
 
                 sample_input_filename = os.path.join(f"{sample_in_dir}", f"inp-{file_idx}.npz")
+                if save_inputs_as_uint8:
+                    sample_in = (255 * sample_in).to(dtype=torch.uint8)
                 numpy.savez(sample_input_filename, sample_in)
 
                 sample_output_filename = os.path.join(f"{sample_out_dir}", f"out-{file_idx}.npz")

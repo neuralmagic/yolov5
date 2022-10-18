@@ -485,7 +485,8 @@ def load_checkpoint(
     dnn=False, 
     half=False,
     recipe=None, 
-    resume=None, 
+    recipe_args=None,
+    resume=None,
     rank=-1,
     one_shot=False,
     max_train_steps=-1,
@@ -708,6 +709,7 @@ def run(data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
             num_export_samples=num_export_samples,
             save_dir= os.path.dirname(file),
             image_size=imgsz,
+            save_inputs_as_uint8=f[2] and _graph_has_uint8_inputs(f[2])
         )
 
     # TensorFlow Exports
@@ -790,18 +792,23 @@ def parse_opt(known = False, skip_parse = False):
     return opt
 
 
+def _graph_has_uint8_inputs(onnx_path):
+    import onnx
+    onnx_model = onnx.load(onnx_path)
+    # check if first model input has elem type 2 (uint8)
+    return onnx_model.graph.input[0].type.tensor_type.elem_type == 2
+
+
 def main(opt):
     for opt.weights in (opt.weights if isinstance(opt.weights, list) else [opt.weights]):
         run(**vars(opt))
 
-
 def export_run(**kwargs):
-    opt = parse_opt(known=True) if not kwargs else parse_opt(skip_parse=True)
+    opt = parse_opt(known = True) if not kwargs else parse_opt(skip_parse = True)
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
     return opt
-
 
 if __name__ == "__main__":
     opt = parse_opt()

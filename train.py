@@ -92,7 +92,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Loggers
     data_dict = None
     if RANK in [-1, 0]:
-        loggers = Loggers(save_dir, weights, opt, hyp, LOGGER)  # loggers instance
+        loggers = Loggers(Path(opt.log_directory or save_dir), weights, opt, hyp, LOGGER)  # loggers instance
         if loggers.wandb:
             data_dict = loggers.wandb.data_dict
             if resume:
@@ -127,7 +127,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             hyp=hyp, 
             nc=nc, 
             recipe=opt.recipe, 
-            resume=opt.resume, 
+            recipe_args=opt.recipe_args,
+            resume=opt.resume,
             rank=LOCAL_RANK,
             one_shot=opt.one_shot,
             max_train_steps=opt.max_train_steps,
@@ -213,7 +214,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             LOGGER.info('%s has been trained for %g epochs. Fine-tuning for %g additional epochs.' %
                         (weights, start_epoch-1, epochs))
             epochs += start_epoch  # finetune additional epochs
-        if sparseml_wrapper.qat_active(start_epoch):
+        if sparseml_wrapper.qat_active(start_epoch) and ema:
             ema.enabled = False
 
         # Optimizer
@@ -366,7 +367,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             LOGGER.info('Disabling half precision and EMA, QAT scheduled to run')
             half_precision = False
             scaler._enabled = False
-            ema.enabled = False
+            if ema:
+                ema.enabled = False
         model.train()
 
         # Update image weights (optional, single-GPU only)
@@ -604,6 +606,9 @@ def parse_opt(known=False, skip_parse=False):
     parser.add_argument('--artifact_alias', type=str, default='latest', help='W&B: Version of dataset artifact to use')
     parser.add_argument('--recipe', type=str, default=None, help='Path to a sparsification recipe, '
                                                                  'see https://github.com/neuralmagic/sparseml for more information')
+    parser.add_argument("--recipe-args", type=str, default=None, help = 'A json string, csv key=value string, or dictionary '
+                                                                        'containing arguments to override the root arguments '
+                                                                        'within the recipe such as learning rate or num epochs')
     parser.add_argument('--disable-ema', action='store_true', help='Disable EMA model updates (enabled by default)')
     
     parser.add_argument("--max-train-steps", type=int, default=-1, help="Set the maximum number of training steps per epoch. if negative,"
@@ -611,6 +616,7 @@ def parse_opt(known=False, skip_parse=False):
     parser.add_argument("--max-eval-steps", type=int, default=-1, help="Set the maximum number of eval steps per epoch. if negative,"
                                                                         "the entire dataset will be used, default=-1")
     parser.add_argument("--one-shot", action="store_true", default=False, help="Apply recipe in one shot manner")
+    parser.add_argument("--log-directory", type=str, default=None, help="Directory to log to. Defaults to save directory")
 
     if skip_parse:
         opt = parser.parse_args([])
