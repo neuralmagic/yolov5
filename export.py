@@ -556,7 +556,9 @@ def load_checkpoint(
     if train_type:
         # intialize the recipe for training and restore the weights before if no quantized weights
         quantized_state_dict = any([name.endswith('.zero_point') for name in state_dict.keys()])
-        if not quantized_state_dict:
+        quantized_model_dict = any([name.endswith('.zero_point') for name in model.state_dict().keys()])
+
+        if not (quantized_state_dict or quantized_model_dict):
             state_dict = load_state_dict(model, state_dict, run_mode=True, exclude_anchors=exclude_anchors)
             loaded = True
 
@@ -580,7 +582,12 @@ def load_checkpoint(
 def load_state_dict(model, state_dict, run_mode, exclude_anchors):
     # fix older state_dict names not porting to the new model setup
     state_dict = {key if not key.startswith("module.") else key[7:]: val for key, val in state_dict.items()}
-
+    new_state_dict = {}
+    for k in model.state_dict().keys():
+        sk = k.replace("module.", "")
+        if sk in state_dict:
+            new_state_dict[k] = state_dict[sk]
+    state_dict = new_state_dict
     if run_mode:
         # load any missing weights from the model
         state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=['anchor'] if exclude_anchors else [])
