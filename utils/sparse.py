@@ -52,7 +52,58 @@ def check_download_sparsezoo_weights(path):
     return path
 
 
-def _replace_forward(model, mode):
+def _replace_forward_per_layer(model, mode):
+    def _forward_per_layer(self, x, profile=False, visualize=False):
+        y, dt = [], []  # outputs
+        output = {}
+        for m in self.model:
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            if profile:
+                self._profile_one_layer(m, x, dt)
+            x = m(x)  # run
+            if "conv" in m.__class__.__name__.lower():
+                print(m.name)
+                output[m.name] = torch.clone(x)
+            y.append(x if m.i in self.save else None)  # save output
+            if visualize:
+                feature_visualization(x, m.type, m.i, save_dir=visualize)
+        output["output"] = x
+        return output
+
+    if mode == "student":
+        def _forward(self, x, augment=False, profile=False, visualize=False, per_layer=False):
+            if augment:
+                return self._forward_augment(x)
+            elif per_layer:
+                return self._forward_per_layer(x, profile, visualize)
+            else:
+                return self._forward_once(x, profile, visualize)
+    elif mode == "teacher":
+        def _forward(self, x):
+            return self._forward_per_layer(x)
+
+    if is_parallel(model):
+        model_forward_per_layer = _forward_per_layer.__get__(
+            model.module,
+            model.module.__class__,
+        )
+        setattr(model.module, "_forward_per_layer", model_forward_per_layer)
+
+        model_forward = _forward.__get__(
+            model.module,
+            model.module.__class__,
+        )
+        setattr(model.module, "forward", model_forward)
+    else:
+        model_forward_per_layer = _forward_per_layer.__get__(model, model.__class__)
+        setattr(model, "_forward_per_layer", model_forward_per_layer)
+
+        model_forward = _forward.__get__(model, model.__class__)
+        setattr(model, "forward", model_forward)
+
+
+def _replace_forward_feature(model, mode):
     def _forward_with_feature(self, x, profile=False, visualize=False):
         y, dt = [], []  # outputs
         output = {}
@@ -194,10 +245,9 @@ class SparseMLWrapper(object):
             )[0],
         }
 
-        if self.manager.feature_distillation_modifiers:
-            _replace_forward(self.model, "student")
-            if teacher_model is not None:
-                _replace_forward(teacher_model, "teacher")
+        if self.manager.feature_distillation_modifiers and teacher_model is not None:
+            _replace_forward_feature(self.model, "student")
+            _replace_forward_feature(teacher_model, "teacher")
 
         self.manager.initialize(
             self.model,
