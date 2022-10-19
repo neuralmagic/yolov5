@@ -199,11 +199,6 @@ class SparseMLWrapper(object):
                 teacher_model is not None:
             _replace_forward_feature(self.model, "student")
             _replace_forward_feature(teacher_model, "teacher")
-        elif hasattr(self.manager, "per_layer_distillation_modifiers") and \
-                self.manager.per_layer_distillation_modifiers and \
-                teacher_model is not None:
-            _replace_forward_per_layer(self.model, "student")
-            _replace_forward_per_layer(teacher_model, "teacher")
 
         self.manager.initialize(
             self.model,
@@ -412,6 +407,7 @@ class SparseMLWrapper(object):
             self.manager is not None
             and self.manager.initialized
             and self.manager.enabled
+            and hasattr(self.manager, "feature_distillation_modifiers")
             and self.manager.feature_distillation_modifiers
         ):
             student_outputs = self.model(inputs, with_feature=True)
