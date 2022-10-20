@@ -194,11 +194,13 @@ class SparseMLWrapper(object):
             )[0],
         }
 
-        if hasattr(self.manager, "feature_distillation_modifiers") and \
-                self.manager.feature_distillation_modifiers and \
-                teacher_model is not None:
+        if (
+                hasattr(self.manager, "feature_distillation_modifiers") and
+                self.manager.feature_distillation_modifiers
+        ):
             _replace_forward_feature(self.model, "student")
-            _replace_forward_feature(teacher_model, "teacher")
+            if teacher_model is not None:
+                _replace_forward_feature(teacher_model, "teacher")
 
         self.manager.initialize(
             self.model,
