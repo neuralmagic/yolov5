@@ -218,6 +218,14 @@ class SparseMLWrapper(object):
 
         return qat_start < epoch + 1
 
+    def distillation_active(self, epoch):
+        if not self.enabled or not self.manager.distillation_modifiers:
+            return False
+
+        distillation_start = min([mod.start_epoch for mod in self.manager.distillation_modifiers])
+
+        return distillation_start < epoch + 1
+
     def reset_best(self, epoch):
         if not self.enabled:
             return False

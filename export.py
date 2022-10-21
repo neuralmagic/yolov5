@@ -458,7 +458,9 @@ def create_deployment_folder(file):
 
 
 def create_checkpoint(epoch, final_epoch, model, optimizer, ema, sparseml_wrapper, **kwargs):
-    pickle = not sparseml_wrapper.qat_active(math.inf if epoch <0 else epoch)  # qat does not support pickled exports
+    qat_active = sparseml_wrapper.qat_active(math.inf if epoch < 0 else epoch)
+    distillation_active = sparseml_wrapper.distillation_active(math.inf if epoch < 0 else epoch)
+    pickle = not (qat_active or distillation_active) # qat and distillation do not support pickled exports
     ckpt_model = deepcopy(model.module if is_parallel(model) else model).float()
     yaml = ckpt_model.yaml
     if not pickle:
