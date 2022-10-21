@@ -142,6 +142,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             model,
             None,
             opt.recipe,
+            recipe_args=opt.recipe_args,
             train_mode=True,
             steps_per_epoch=opt.max_train_steps,
             one_shot=opt.one_shot,
@@ -350,7 +351,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             img_size=imgsz, 
             grid_size=gs,
             teacher_model=teacher_model,
-            optimizer=optimizer
         )
 
     # Continue as expected

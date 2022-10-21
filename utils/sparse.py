@@ -10,14 +10,12 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 from sparseml.pytorch.sparsification.quantization import QuantizationModifier
 import torchvision.transforms.functional as F
 
-from utils.plots import feature_visualization
 from utils.torch_utils import is_parallel
 import torch.nn as nn
 import torch
 import numpy
 
 _LOGGER = logging.getLogger(__file__)
-
 
 def _get_model_framework_file(model, path):
     available_files = model.training.default.files
@@ -73,15 +71,8 @@ class SparseMLWrapper(object):
         self.steps_per_epoch = steps_per_epoch
         self.one_shot = one_shot
         self.train_recipe = train_recipe
-        self.original_compute_loss = None
 
         self.apply_checkpoint_structure(train_mode, epoch, one_shot)
-        if (
-                hasattr(self.manager, "feature_distillation_modifiers") and
-                self.manager.feature_distillation_modifiers
-        ):
-            _replace_forward_feature(self.model, "student")
-
 
     def state_dict(self, final_epoch):
         if self.enabled and final_epoch:
@@ -131,10 +122,8 @@ class SparseMLWrapper(object):
         train_loader, 
         device,
         teacher_model,
-        optimizer,
         **train_loader_kwargs,
     ):
-        self.original_compute_loss = compute_loss
         if not self.enabled:
             return
 
@@ -154,7 +143,6 @@ class SparseMLWrapper(object):
             distillation_teacher=teacher_model
         )
         self.start_epoch = start_epoch
-        self.optimizer = optimizer
 
     def initialize_loggers(self, logger, tb_writer, wandb_logger):
         self.logger = logger
