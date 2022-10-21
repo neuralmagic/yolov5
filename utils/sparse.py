@@ -344,3 +344,28 @@ class SparseMLWrapper(object):
         # reset model.training if needed
         if model_was_in_train_mode:
             self.model.train()
+
+    def compute_loss(self, epoch, optimizer, inputs, targets):
+        if (
+            self.manager is not None
+            and self.manager.initialized
+            and self.manager.enabled
+            and self.manager.distillation_modifiers
+        ):
+            batch_size = inputs.size(0)
+            student_outputs = self.model(inputs)
+            loss, loss_items = self.original_compute_loss(student_outputs, targets)
+            loss = loss / batch_size
+            loss = self.manager.loss_update(
+                loss,
+                self.model,
+                optimizer,
+                epoch,
+                self.steps_per_epoch,
+                student_outputs=student_outputs,
+                student_inputs=inputs,
+                student_labels=targets,
+            )
+            loss = loss * batch_size
+
+        return loss, loss_items
