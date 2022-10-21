@@ -52,59 +52,6 @@ def check_download_sparsezoo_weights(path):
     return path
 
 
-def _replace_forward_feature(model, mode):
-    def _forward_with_feature(self, x, profile=False, visualize=False):
-        y, dt = [], []  # outputs
-        output = {}
-        for m in self.model:
-            if m.f != -1:  # if not from previous layer
-                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
-            if profile:
-                self._profile_one_layer(m, x, dt)
-            if m.__class__.__name__ == "Detect":
-                if isinstance(x, list):
-                    output["feature"] = [torch.clone(xl) for xl in x]
-                else:
-                    output["feature"] = torch.clone(x)
-            x = m(x)  # run
-            y.append(x if m.i in self.save else None)  # save output
-            if visualize:
-                feature_visualization(x, m.type, m.i, save_dir=visualize)
-        output["output"] = x
-        return output
-
-    if mode == "student":
-        def _forward(self, x, augment=False, profile=False, visualize=False, with_feature=False):
-            if augment:
-                return self._forward_augment(x)
-            elif with_feature:
-                return self._forward_with_feature(x, profile, visualize)
-            else:
-                return self._forward_once(x, profile, visualize)
-    elif mode == "teacher":
-        def _forward(self, x):
-            return self._forward_with_feature(x)
-
-    if is_parallel(model):
-        model_forward_with_feature = _forward_with_feature.__get__(
-            model.module,
-            model.module.__class__,
-        )
-        setattr(model.module, "_forward_with_feature", model_forward_with_feature)
-
-        model_forward = _forward.__get__(
-            model.module,
-            model.module.__class__,
-        )
-        setattr(model.module, "forward", model_forward)
-    else:
-        model_forward_with_feature = _forward_with_feature.__get__(model, model.__class__)
-        setattr(model, "_forward_with_feature", model_forward_with_feature)
-
-        model_forward = _forward.__get__(model, model.__class__)
-        setattr(model, "forward", model_forward)
-
-
 class SparseMLWrapper(object):
     def __init__(
         self,
@@ -129,6 +76,12 @@ class SparseMLWrapper(object):
         self.original_compute_loss = None
 
         self.apply_checkpoint_structure(train_mode, epoch, one_shot)
+        if (
+                hasattr(self.manager, "feature_distillation_modifiers") and
+                self.manager.feature_distillation_modifiers
+        ):
+            _replace_forward_feature(self.model, "student")
+
 
     def state_dict(self, final_epoch):
         if self.enabled and final_epoch:
@@ -193,14 +146,6 @@ class SparseMLWrapper(object):
                 [p for p in pred[1]], target.to(device)
             )[0],
         }
-
-        if (
-                hasattr(self.manager, "feature_distillation_modifiers") and
-                self.manager.feature_distillation_modifiers
-        ):
-            _replace_forward_feature(self.model, "student")
-            if teacher_model is not None:
-                _replace_forward_feature(teacher_model, "teacher")
 
         self.manager.initialize(
             self.model,
@@ -403,39 +348,3 @@ class SparseMLWrapper(object):
         # reset model.training if needed
         if model_was_in_train_mode:
             self.model.train()
-
-    def compute_loss(self, epoch, inputs, targets):
-        if (
-            self.manager is not None
-            and self.manager.initialized
-            and self.manager.enabled
-            and hasattr(self.manager, "feature_distillation_modifiers")
-            and self.manager.feature_distillation_modifiers
-        ):
-            student_outputs = self.model(inputs, with_feature=True)
-            loss, loss_items = self.original_compute_loss(student_outputs["output"], targets)
-        else:
-            student_outputs = self.model(inputs)
-            loss, loss_items = self.original_compute_loss(student_outputs, targets)
-
-        if (
-            self.manager is not None
-            and self.manager.initialized
-            and self.manager.enabled
-            and self.manager.distillation_modifiers
-        ):
-            batch_size = inputs.size(0)
-            loss = loss / batch_size
-            loss = self.manager.loss_update(
-                loss,
-                self.model,
-                self.optimizer,
-                epoch,
-                self.steps_per_epoch,
-                student_outputs=student_outputs,
-                student_inputs=inputs,
-                student_labels=targets,
-            )
-            loss = loss * batch_size
-
-        return loss, loss_items
