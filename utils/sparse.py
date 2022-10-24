@@ -71,6 +71,7 @@ class SparseMLWrapper(object):
         self.steps_per_epoch = steps_per_epoch
         self.one_shot = one_shot
         self.train_recipe = train_recipe
+        self.original_compute_loss = None
 
         self.apply_checkpoint_structure(train_mode, epoch, one_shot)
 
@@ -124,6 +125,7 @@ class SparseMLWrapper(object):
         teacher_model,
         **train_loader_kwargs,
     ):
+        self.original_compute_loss = compute_loss
         if not self.enabled:
             return
 
