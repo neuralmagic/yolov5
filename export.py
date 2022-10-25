@@ -587,6 +587,8 @@ def load_state_dict(model, state_dict, run_mode, exclude_anchors):
         sk = k.replace("module.", "")
         if sk in state_dict:
             new_state_dict[k] = state_dict[sk]
+        elif k in state_dict:
+            new_state_dict[k] = state_dict[k]
     state_dict = new_state_dict
     if run_mode:
         # load any missing weights from the model
