@@ -399,7 +399,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 xi = [0, nw]  # x interp
                 # compute_loss.gr = np.interp(ni, xi, [0.0, 1.0])  # iou loss ratio (obj_loss = 1.0 or iou)
                 accumulate = max(1, np.interp(ni, xi, [1, nbs / batch_size]).round())
-                for j, x in enumerate(optimizer.param_groups[:2]):
+                for j, x in enumerate(optimizer.param_groups[:3]):
                     # bias lr falls from 0.1 to lr0, all other lrs rise from 0.0 to lr0
                     if scheduler:
                         x['lr'] = np.interp(ni, xi, [hyp['warmup_bias_lr'] if j == 2 else 0.0, x['initial_lr'] * lf(epoch)])
@@ -459,7 +459,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             # end batch ------------------------------------------------------------------------------------------------
 
         # Scheduler
-        lr = [x['lr'] for x in optimizer.param_groups]  # for loggers
+        lr = [x['lr'] for x in optimizer.param_groups[:3]]  # for loggers
         if scheduler:
             scheduler.step()
 
@@ -483,7 +483,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            max_eval_steps=opt.max_eval_steps)
 
             # Update best mAP
-            fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
+            fi = fitness(np.array(results).reshape(1, -1))  # cfweighted combination of [P, R, mAP@.5, mAP@.5-.95]
             if fi > best_fitness or sparseml_wrapper.reset_best(epoch):
                 best_fitness = fi
             log_vals = list(mloss) + list(results) + lr
