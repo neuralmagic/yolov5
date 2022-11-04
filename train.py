@@ -114,7 +114,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     # Model
     check_suffix(weights, '.pt')  # check weights
-    pretrained = weights.endswith('.pt')
+    pretrained = weights.endswith('.pt') or weights.startswith("zoo:")
     if pretrained:
         with torch_distributed_zero_first(LOCAL_RANK):
             weights = attempt_download(weights)  # download if not found locally
