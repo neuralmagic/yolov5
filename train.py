@@ -55,6 +55,7 @@ from utils.loggers import Loggers
 from utils.loggers.comet.comet_utils import check_comet_resume
 from utils.loss import ComputeLoss
 from utils.metrics import fitness
+from utils.neural_magic import sparsezoo_download, maybe_load_sparse_model, SparseTrainManager
 from utils.plots import plot_evolve
 from utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, select_device, smart_DDP, smart_optimizer,
                                smart_resume, torch_distributed_zero_first)
@@ -114,19 +115,28 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     # Model
     check_suffix(weights, '.pt')  # check weights
-    pretrained = weights.endswith('.pt')
+    pretrained = weights.endswith('.pt') or weights.startswith("zoo:")
     if pretrained:
         with torch_distributed_zero_first(LOCAL_RANK):
-            weights = attempt_download(weights)  # download if not found locally
+            weights = ( # download if not found locally
+                attempt_download(weights) if not weights.startswith("zoo:") 
+                else sparsezoo_download(weights)
+            ) 
         ckpt = torch.load(weights, map_location='cpu')  # load checkpoint to CPU to avoid CUDA memory leak
-        model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(cfg or ckpt.get('yaml') or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        sparse_manager = maybe_load_sparse_model(model, ckpt=ckpt, train_recipe=opt.sparsification_recipe, recipe_args=opt.recipe_args) # process sparse model, if detected 
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
-        csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
+        csd = ckpt['model'].float().state_dict() if isinstance(ckpt['model'], nn.Module) else ckpt['model'] # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(csd, strict=False)  # load
         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        sparse_manager = (
+            SparseTrainManager(model, train_recipe=opt.sparsification_recipe, recipe_args=opt.recipe_args) 
+            if opt.sparsification_recipe 
+            else None
+        )
     amp = check_amp(model)  # check AMP
 
     # Freeze
@@ -250,6 +260,17 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     scaler = torch.cuda.amp.GradScaler(enabled=amp)
     stopper, stop = EarlyStopping(patience=opt.patience), False
     compute_loss = ComputeLoss(model)  # init loss class
+    if sparse_manager: # update run configuration for training-aware sparsification
+        scaler, scheduler, ema, epochs = sparse_manager.initialize(
+            sclaer=scaler, 
+            optimizer=optimizer, 
+            scheduler=scheduler, 
+            ema=ema, 
+            train_loader=train_loader,
+            start_epoch=start_epoch, 
+            epochs=epochs, 
+            resume=resume,
+        )
     callbacks.run('on_train_start')
     LOGGER.info(f'Image sizes {imgsz} train, {imgsz} val\n'
                 f'Using {train_loader.num_workers * WORLD_SIZE} dataloader workers\n'
@@ -257,6 +278,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 f'Starting training for {epochs} epochs...')
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         callbacks.run('on_train_epoch_start')
+
+        # Turn off features incompatible with QAT
+        if sparse_manager and sparse_manager.qat_active(epoch):
+            ema.enabled = False
+            amp = False
+            sparse_manager.turn_off_scaler(scaler)
+
         model.train()
 
         # Update image weights (optional, single-GPU only)
@@ -337,7 +365,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         # Scheduler
         lr = [x['lr'] for x in optimizer.param_groups]  # for loggers
-        scheduler.step()
+        if scheduler:
+            scheduler.step()
 
         if RANK in {-1, 0}:
             # mAP
@@ -377,6 +406,9 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     'opt': vars(opt),
                     'date': datetime.now().isoformat()}
 
+                if sparse_manager:
+                    ckpt = sparse_manager.update_state_dict_for_saving(ckpt, final_epoch, ema.enabled)
+
                 # Save last, best and delete
                 torch.save(ckpt, last)
                 if best_fitness == fi:
@@ -397,7 +429,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         # end epoch ----------------------------------------------------------------------------------------------------
     # end training -----------------------------------------------------------------------------------------------------
-    if RANK in {-1, 0}:
+    if RANK in {-1, 0} and not sparse_manager:
         LOGGER.info(f'\n{epoch - start_epoch + 1} epochs completed in {(time.time() - t0) / 3600:.3f} hours.')
         for f in last, best:
             if f.exists():
@@ -463,6 +495,11 @@ def parse_opt(known=False):
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--seed', type=int, default=0, help='Global training seed')
     parser.add_argument('--local_rank', type=int, default=-1, help='Automatic DDP Multi-GPU argument, do not modify')
+    parser.add_argument('--sparsification-recipe', type=str, default=None, help='Path to a sparsification recipe, '
+                                                                 'see https://github.com/neuralmagic/sparseml for more information')
+    parser.add_argument("--recipe-args", type=str, default=None, help = 'A json string, csv key=value string, or dictionary '
+                                                                        'containing arguments to override the root arguments '
+                                                                        'within the recipe such as learning rate or num epochs')
 
     # Logger arguments
     parser.add_argument('--entity', default=None, help='Entity')
