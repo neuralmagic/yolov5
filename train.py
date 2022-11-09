@@ -262,13 +262,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     compute_loss = ComputeLoss(model)  # init loss class
     if sparse_manager: # update run configuration for training-aware sparsification
         scaler, scheduler, ema, epochs = sparse_manager.initialize(
-            sclaer=scaler, 
-            optimizer=optimizer, 
-            scheduler=scheduler, 
-            ema=ema, 
-            train_loader=train_loader,
-            start_epoch=start_epoch, 
-            epochs=epochs, 
+            scaler=scaler,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            ema=ema,
+            dataloader=train_loader,
+            start_epoch=start_epoch,
+            epochs=epochs,
             resume=resume,
         )
     callbacks.run('on_train_start')
