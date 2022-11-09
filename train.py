@@ -120,7 +120,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         with torch_distributed_zero_first(LOCAL_RANK):
             weights = ( # download if not found locally
                 attempt_download(weights) if not weights.startswith("zoo:") 
-                else sparsezoo_download(weights)
+                else sparsezoo_download(weights, opt.sparsification_recipe)
             ) 
         ckpt = torch.load(weights, map_location='cpu')  # load checkpoint to CPU to avoid CUDA memory leak
         model = Model(cfg or ckpt.get('yaml') or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
