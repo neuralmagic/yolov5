@@ -159,14 +159,14 @@ class SparseTrainManager(object):
             checkpoint_recipe = None
 
         # Pickling is not supported for quantized models for a subset of the supported
-        # torch versions, thus models are saved via their state dict for all sparse
-        # models
+        # torch versions, thus all sparse models are saved via their state dict
         sparseml_dict_update = {
             "model": ckpt["model"].state_dict(),
             "yaml": ckpt["model"].yaml,
             "ema": ckpt["ema"].state_dict() if ema_enabled else None,
             "updates": ckpt["updates"] if ema_enabled else None,
             "checkpoint_recipe": str(checkpoint_recipe),
+            "epoch": -1 if final_epoch else ckpt["epoch"],
         }
         ckpt.update(sparseml_dict_update)
 
