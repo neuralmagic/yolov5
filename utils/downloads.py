@@ -12,8 +12,6 @@ from pathlib import Path
 import requests
 import torch
 
-from utils.neural_magic import check_download_sparsezoo_weights
-
 
 
 def is_url(url, check=True):
@@ -85,9 +83,6 @@ def attempt_download(file, repo='ultralytics/yolov5', release='v6.2'):
             else:
                 safe_download(file=file, url=url, min_bytes=1E5)
             return file
-
-        elif str(file).startswith("zoo:"):
-            return check_download_sparsezoo_weights(str(file))
 
         # GitHub assets
         assets = [f'yolov5{size}{suffix}.pt' for size in 'nsmlx' for suffix in ('', '6', '-cls', '-seg')]  # default
