@@ -1,2 +1,2 @@
-from .sparse_manager import *
+from .sparse_train_manager import *
 from .utils import *
