@@ -10,7 +10,7 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 from utils.autobatch import check_train_batch_size
 from utils.general import colorstr
 from utils.loggers import Loggers
-from utils.neural_magic.utils import load_ema
+from utils.neural_magic.utils import ToggleableModelEMA, load_ema
 from utils.torch_utils import ModelEMA, de_parallel
 
 __all__ = ["SparseTrainManager", "maybe_load_sparse_model"]
@@ -198,13 +198,20 @@ class SparseTrainManager(object):
         """
         return bool(self.train_manager.quantization_modifiers)
 
-    def turn_off_scaler(self, scaler: torch.cuda.amp.GradScaler):
+    def disable_ema_amp(
+        self, ema: ToggleableModelEMA, amp: bool, scaler: torch.cuda.amp.GradScaler
+    ):
         """
-        Turns off grad scaler
-
-        :param scaler: scaler to run off
+        Disable EMA and AMP if active, as they're not compatible with QAT
         """
-        scaler._enabled = False
+        self.log_console_info("Starting QAT phase")
+        if ema.enabled:
+            self.log_console_info("Turning off EMA (not supported with QAT)")
+            ema.enabled = False
+        if amp:
+            self.log_console_info("Turning off AMP (not supported with QAT)")
+            amp = False
+            scaler._enabled = False
 
     def rescale_gradient_accumulation(
         self, batch_size: int, accumulate: int, image_size: int
