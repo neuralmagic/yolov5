@@ -17,7 +17,6 @@ __all__ = ["SparseTrainManager", "maybe_load_sparse_model"]
 
 RANK = int(os.getenv("RANK", -1))
 
-
 class SparseTrainManager(object):
     """
     Class for managing train state during sparse training with Neural Magic
@@ -71,7 +70,7 @@ class SparseTrainManager(object):
         # thinning
         if self.checkpoint_manager:
             self.checkpoint_manager.apply_structure(
-                self.model, last_epoch if last_epoch > -1 else float("inf")
+                self.model, last_epoch if last_epoch >= 0 else float("inf")
             )
 
     def initialize(
@@ -122,7 +121,8 @@ class SparseTrainManager(object):
         if self.train_manager.epoch_modifiers and self.train_manager.max_epochs:
             epochs = self.train_manager.max_epochs
             self.log_console_info(
-                f"Overriding total number of training epochs to {epochs}"
+                "Overriding total number of training epochs with value from recipe: "
+                f"{epochs}"
             )
 
         # construct a ToggleableModelEMA from ModelEMA, allowing for disabling for QAT
@@ -240,7 +240,8 @@ class SparseTrainManager(object):
             if batch_size % divisor == 0
         )
         new_batch_size = batch_size // closest_divisor
-        new_accumulate = (batch_size * accumulate) // new_batch_size
+        new_accumulate = math.floor((batch_size * accumulate) // new_batch_size)
+        new_batch_size = batch_size // new_accumulate
 
         self.log_console_info(
             f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
