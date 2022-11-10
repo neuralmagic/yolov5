@@ -295,7 +295,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             ema.enabled = False
             amp = False
             sparse_manager.turn_off_scaler(scaler)
-
             # Rescale batch size for QAT
             if opt.batch_size == -1:
                 batch_size, accumulate = sparse_manager.rescale_gradient_accumulation(

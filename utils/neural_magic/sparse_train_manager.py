@@ -10,13 +10,13 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 from utils.autobatch import check_train_batch_size
 from utils.general import colorstr
 from utils.loggers import Loggers
+
 from utils.neural_magic.utils import load_ema
 from utils.torch_utils import ModelEMA, de_parallel
 
 __all__ = ["SparseTrainManager", "maybe_load_sparse_model"]
 
 RANK = int(os.getenv("RANK", -1))
-
 
 class SparseTrainManager(object):
     """
@@ -69,7 +69,7 @@ class SparseTrainManager(object):
         # thinning
         if self.checkpoint_manager:
             self.checkpoint_manager.apply_structure(
-                self.model, last_epoch if last_epoch > -1 else float("inf")
+                self.model, last_epoch if last_epoch >= 0 else float("inf")
             )
 
     def initialize(
@@ -120,7 +120,8 @@ class SparseTrainManager(object):
         if self.train_manager.epoch_modifiers and self.train_manager.max_epochs:
             epochs = self.train_manager.max_epochs
             self.log_console_info(
-                f"Overriding total number of training epochs to {epochs}"
+                "Overriding total number of training epochs with value from recipe: "
+                f"{epochs}"
             )
 
         # construct a ToggleableModelEMA from ModelEMA, allowing for disabling for QAT
