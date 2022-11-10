@@ -60,7 +60,7 @@ class SparseTrainManager(object):
         # thinning
         if self.checkpoint_manager:
             self.checkpoint_manager.apply_structure(
-                self.model, last_epoch if last_epoch > -1 else float("inf")
+                self.model, last_epoch if last_epoch >= 0 else float("inf")
             )
 
     def initialize(
