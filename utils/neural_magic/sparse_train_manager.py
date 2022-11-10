@@ -117,7 +117,8 @@ class SparseTrainManager(object):
         if self.train_manager.epoch_modifiers and self.train_manager.max_epochs:
             epochs = self.train_manager.max_epochs
             self.log_console_info(
-                f"Overriding total number of training epochs to {epochs}"
+                "Overriding total number of training epochs with value from recipe: "
+                f"{epochs}"
             )
 
         # construct a ToggleableModelEMA from ModelEMA, allowing for disabling for QAT
