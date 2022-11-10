@@ -191,47 +191,53 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(device)
         LOGGER.info('Using SyncBatchNorm()')
 
-    # Trainloader
-    train_loader, dataset = create_dataloader(train_path,
-                                              imgsz,
-                                              batch_size // WORLD_SIZE,
-                                              gs,
-                                              single_cls,
-                                              hyp=hyp,
-                                              augment=True,
-                                              cache=None if opt.cache == 'val' else opt.cache,
-                                              rect=opt.rect,
-                                              rank=LOCAL_RANK,
-                                              workers=workers,
-                                              image_weights=opt.image_weights,
-                                              quad=opt.quad,
-                                              prefix=colorstr('train: '),
-                                              shuffle=True)
+    def _create_dataloaders():
+        # Trainloader
+        train_loader, dataset = create_dataloader(train_path,
+                                                imgsz,
+                                                batch_size // WORLD_SIZE,
+                                                gs,
+                                                single_cls,
+                                                hyp=hyp,
+                                                augment=True,
+                                                cache=None if opt.cache == 'val' else opt.cache,
+                                                rect=opt.rect,
+                                                rank=LOCAL_RANK,
+                                                workers=workers,
+                                                image_weights=opt.image_weights,
+                                                quad=opt.quad,
+                                                prefix=colorstr('train: '),
+                                                shuffle=True)      
+        
+        val_loader = None
+        # Process 0
+        if RANK in {-1, 0}:
+            val_loader = create_dataloader(val_path,
+                                        imgsz,
+                                        batch_size // WORLD_SIZE * 2,
+                                        gs,
+                                        single_cls,
+                                        hyp=hyp,
+                                        cache=None if noval else opt.cache,
+                                        rect=True,
+                                        rank=-1,
+                                        workers=workers * 2,
+                                        pad=0.5,
+                                        prefix=colorstr('val: '))[0]
+
+        return train_loader, dataset, val_loader
+
+    train_loader, dataset, val_loader = _create_dataloaders()
     labels = np.concatenate(dataset.labels, 0)
     mlc = int(labels[:, 0].max())  # max label class
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
-    # Process 0
-    if RANK in {-1, 0}:
-        val_loader = create_dataloader(val_path,
-                                       imgsz,
-                                       batch_size // WORLD_SIZE * 2,
-                                       gs,
-                                       single_cls,
-                                       hyp=hyp,
-                                       cache=None if noval else opt.cache,
-                                       rect=True,
-                                       rank=-1,
-                                       workers=workers * 2,
-                                       pad=0.5,
-                                       prefix=colorstr('val: '))[0]
+    if not resume:
+        if not opt.noautoanchor:
+            check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)  # run AutoAnchor
+        model.half().float()  # pre-reduce anchor precision
 
-        if not resume:
-            if not opt.noautoanchor:
-                check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)  # run AutoAnchor
-            model.half().float()  # pre-reduce anchor precision
-
-        callbacks.run('on_pretrain_routine_end', labels, names)
+    callbacks.run('on_pretrain_routine_end', labels, names)
 
     # DDP mode
     if cuda and RANK != -1:
@@ -289,6 +295,14 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             amp = False
             sparse_manager.turn_off_scaler(scaler)
 
+            # Rescale batch size for QAT
+            if opt.batch_size == -1:
+                batch_size, accumulate = sparse_manager.rescale_gradient_accumulation(
+                    batch_size=batch_size, 
+                    accumulate=accumulate, 
+                    image_size=imgsz
+                )
+                train_loader, dataset, val_loader = _create_dataloaders()
 
         model.train()
 
