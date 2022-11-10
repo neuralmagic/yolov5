@@ -214,14 +214,8 @@ class SparseTrainManager(object):
         # the original effective batch size. Note that if the original batch size is odd
         # then the effective batch size will be incremented by 1
         batch_size = batch_size if batch_size % 2 == 0 else batch_size + 1
-        batch_size_ratio = math.floor(batch_size / new_batch_size)
-        closest_divisor = next(
-            divisor
-            for divisor in range(batch_size_ratio, 1, -1)
-            if batch_size % divisor == 0
-        )
-        new_batch_size = batch_size // closest_divisor
-        new_accumulate = (batch_size * accumulate) // new_batch_size
+        new_accumulate = math.floor((batch_size * accumulate) // new_batch_size)
+        new_batch_size = batch_size // new_accumulate
 
         self.log_console_info(
             f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "

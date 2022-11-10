@@ -232,12 +232,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     mlc = int(labels[:, 0].max())  # max label class
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
-    if not resume:
-        if not opt.noautoanchor:
-            check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)  # run AutoAnchor
-        model.half().float()  # pre-reduce anchor precision
+    if RANK in {-1, 0}:
+        if not resume:
+            if not opt.noautoanchor:
+                check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)  # run AutoAnchor
+            model.half().float()  # pre-reduce anchor precision
 
-    callbacks.run('on_pretrain_routine_end', labels, names)
+        callbacks.run('on_pretrain_routine_end', labels, names)
 
     # DDP mode
     if cuda and RANK != -1:
