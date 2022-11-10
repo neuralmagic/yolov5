@@ -287,7 +287,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         callbacks.run('on_train_epoch_start')
 
         # Turn off features incompatible with QAT
-        if sparse_manager and sparse_manager.qat_active(epoch):
+        if sparse_manager and sparse_manager.starting_qat(epoch):
             sparse_manager.log_console_info(
                 "QAT phase detected. Disabling EMA and AMP if enabled"
             )

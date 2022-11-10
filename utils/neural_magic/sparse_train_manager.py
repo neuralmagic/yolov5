@@ -40,6 +40,8 @@ class SparseTrainManager(object):
         checkpoint_recipe: str = None,
         last_epoch: int = 0,
     ):
+        self.qat_started = False
+
         # Recipes can be sensitive to module names, target correct submodule if parallel
         self.model = (
             model.module
@@ -165,6 +167,16 @@ class SparseTrainManager(object):
     def log_console_info(self, message: str):
         if RANK in [0, -1]:
             self.logger.info(f"{colorstr('Neural Magic: ')}{message}")
+
+    def starting_qat(self, epoch: int) -> bool:
+        """
+        Returns true if this is the first epoch QAT is turned on
+        """
+        if not self.qat_started:
+            self.qat_started = self.qat_active(epoch)
+            return self.qat_started
+        else:
+            return False
 
     def qat_active(self, epoch: int) -> bool:
         """
