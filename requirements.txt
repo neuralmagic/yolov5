@@ -37,6 +37,10 @@ seaborn>=0.11.0
 # Deploy --------------------------------------
 # tritonclient[all]~=2.24.0
 
+# Neural Magic
+sparseml >= 1.2
+deepsparse >= 1.2
+
 # Extras --------------------------------------
 ipython  # interactive notebook
 psutil  # system utilization
