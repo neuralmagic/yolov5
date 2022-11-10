@@ -10,8 +10,7 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 from utils.autobatch import check_train_batch_size
 from utils.general import colorstr
 from utils.loggers import Loggers
-
-from utils.neural_magic.utils import load_ema
+from utils.neural_magic.utils import ToggleableModelEMA, load_ema
 from utils.torch_utils import ModelEMA, de_parallel
 
 __all__ = ["SparseTrainManager", "maybe_load_sparse_model"]
@@ -40,6 +39,8 @@ class SparseTrainManager(object):
         checkpoint_recipe: str = None,
         last_epoch: int = 0,
     ):
+        self.qat_started = False
+
         # Recipes can be sensitive to module names, target correct submodule if parallel
         self.model = (
             model.module
@@ -167,6 +168,16 @@ class SparseTrainManager(object):
         if RANK in [0, -1]:
             self.logger.info(f"{colorstr('Neural Magic: ')}{message}")
 
+    def starting_qat(self, epoch: int) -> bool:
+        """
+        Returns true if this is the first epoch QAT is turned on
+        """
+        if not self.qat_started:
+            self.qat_started = self.qat_active(epoch)
+            return self.qat_started
+        else:
+            return False
+
     def qat_active(self, epoch: int) -> bool:
         """
         Returns true if QAT is turned on for the given epoch
@@ -187,13 +198,20 @@ class SparseTrainManager(object):
         """
         return bool(self.train_manager.quantization_modifiers)
 
-    def turn_off_scaler(self, scaler: torch.cuda.amp.GradScaler):
+    def disable_ema_amp(
+        self, ema: ToggleableModelEMA, amp: bool, scaler: torch.cuda.amp.GradScaler
+    ):
         """
-        Turns off grad scaler
-
-        :param scaler: scaler to run off
+        Disable EMA and AMP if active, as they're not compatible with QAT
         """
-        scaler._enabled = False
+        self.log_console_info("Starting QAT phase")
+        if ema.enabled:
+            self.log_console_info("Turning off EMA (not supported with QAT)")
+            ema.enabled = False
+        if amp:
+            self.log_console_info("Turning off AMP (not supported with QAT)")
+            amp = False
+            scaler._enabled = False
 
     def rescale_gradient_accumulation(
         self, batch_size: int, accumulate: int, image_size: int
