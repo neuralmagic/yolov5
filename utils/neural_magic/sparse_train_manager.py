@@ -1,15 +1,18 @@
+import os
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
 
-from train import RANK
+from utils.general import colorstr
 from utils.loggers import Loggers
 from utils.neural_magic.utils import load_ema
 from utils.torch_utils import ModelEMA
 
 __all__ = ["SparseTrainManager", "maybe_load_sparse_model"]
+
+RANK = int(os.getenv("RANK", -1))
 
 
 class SparseTrainManager(object):
@@ -84,7 +87,10 @@ class SparseTrainManager(object):
         """
         Update objects controlling the training process for sparse training
         """
+        # Wrap model for sparse training modifiers from recipe
+        self.train_manager.initialize(module=self.model, epoch=start_epoch)
 
+        # initialize SparseML loggers, including recipe modifier loggers
         self.initialize_loggers(loggers)
         self.log_console_info(
             "Sparse training detected. Wrapping training process with SparseML"
@@ -94,9 +100,6 @@ class SparseTrainManager(object):
         # include QAT and layer thinning
         if resume:
             self.train_manager.apply_structure(self.model, start_epoch - 1)
-
-        # Wrap model for sparse training modifiers from recipe
-        self.train_manager.initialize(module=self.model, epoch=start_epoch)
 
         # Wrap the scaler for sparse training modifiers from recipe
         scaler = self.train_manager.modify(
@@ -153,12 +156,12 @@ class SparseTrainManager(object):
         if loggers.wandb and loggers.wandb.wandb:
             artifact = loggers.wandb.wandb.Artifact("recipe", type="recipe")
             with artifact.new_file("recipe.yaml") as file:
-                file.write(str(self.manager))
-            loggers.wandb.log_artifact(artifact)
+                file.write(str(self.train_manager))
+            loggers.wandb.wandb.log_artifact(artifact)
 
     def log_console_info(self, message: str):
         if RANK in [0, -1]:
-            self.logger.info(f"Neural Magic: {message}")
+            self.logger.info(f"{colorstr('Neural Magic: ')}{message}")
 
     def qat_active(self, epoch: int) -> bool:
         """

@@ -270,7 +270,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             dataloader=train_loader,
             start_epoch=start_epoch,
             epochs=epochs,
-            rank = RANK,
             resume=resume,
         )
     callbacks.run('on_train_start')
