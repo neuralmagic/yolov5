@@ -8,11 +8,9 @@ from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
 
 from utils.autobatch import check_train_batch_size
-
 from utils.general import colorstr
 from utils.loggers import Loggers
-
-from utils.neural_magic.utils import load_ema
+from utils.neural_magic.utils import ToggleableModelEMA, load_ema
 from utils.torch_utils import ModelEMA, de_parallel
 
 __all__ = ["SparseTrainManager", "maybe_load_sparse_model"]
@@ -41,6 +39,8 @@ class SparseTrainManager(object):
         checkpoint_recipe: str = None,
         last_epoch: int = 0,
     ):
+        self.qat_started = False
+
         # Recipes can be sensitive to module names, target correct submodule if parallel
         self.model = (
             model.module
@@ -168,6 +168,16 @@ class SparseTrainManager(object):
         if RANK in [0, -1]:
             self.logger.info(f"{colorstr('Neural Magic: ')}{message}")
 
+    def starting_qat(self, epoch: int) -> bool:
+        """
+        Returns true if this is the first epoch QAT is turned on
+        """
+        if not self.qat_started:
+            self.qat_started = self.qat_active(epoch)
+            return self.qat_started
+        else:
+            return False
+
     def qat_active(self, epoch: int) -> bool:
         """
         Returns true if QAT is turned on for the given epoch
@@ -188,13 +198,64 @@ class SparseTrainManager(object):
         """
         return bool(self.train_manager.quantization_modifiers)
 
-    def turn_off_scaler(self, scaler: torch.cuda.amp.GradScaler):
+    def disable_ema_amp(
+        self, ema: ToggleableModelEMA, amp: bool, scaler: torch.cuda.amp.GradScaler
+    ):
         """
-        Turns off grad scaler
+        Disable EMA and AMP if active, as they're not compatible with QAT
+        """
+        self.log_console_info("Starting QAT phase")
+        if ema.enabled:
+            self.log_console_info("Turning off EMA (not supported with QAT)")
+            ema.enabled = False
+        if amp:
+            self.log_console_info("Turning off AMP (not supported with QAT)")
+            amp = False
+            scaler._enabled = False
 
-        :param scaler: scaler to run off
+    def rescale_gradient_accumulation(
+        self, batch_size: int, accumulate: int, image_size: int
+    ) -> Tuple[int, int]:
         """
-        scaler._enabled = False
+        Used when autobatch and QAT are both enabled. Training with QAT adds additional
+        overhead which can cause OOM errors if autobatch is enabled. This function
+        rescales batch size and gradient accumulation to fit into memory with QAT while
+        maintaining the original effective batch size
+        """
+        # Temporary copy of the model with QAT applied
+        quant_model_copy = deepcopy(de_parallel(self.model))
+        self.train_manager.apply_structure(quant_model_copy, float("inf"))
+
+        # Calculate maximum batch size that will fit in memory
+        new_batch_size = check_train_batch_size(quant_model_copy, image_size, False)
+
+        # Calculate batch size closest to maximum that can be accumulated to maintain
+        # the original effective batch size. Note that if the original batch size is odd
+        # then the effective batch size will be incremented by 1
+        batch_size = batch_size if batch_size % 2 == 0 else batch_size + 1
+        batch_size_ratio = math.floor(batch_size / new_batch_size)
+        closest_divisor = next(
+            divisor
+            for divisor in range(batch_size_ratio, 1, -1)
+            if batch_size % divisor == 0
+        )
+        new_batch_size = batch_size // closest_divisor
+        new_accumulate = math.floor((batch_size * accumulate) // new_batch_size)
+        new_batch_size = batch_size // new_accumulate
+
+        self.log_console_info(
+            f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
+            "accumulation steps for QAT"
+        )
+
+        if new_accumulate * new_batch_size != batch_size * accumulate:
+            raise RuntimeError(
+                "New effective batch size doesn't match previous effective batch size. "
+                f"Previous batch size and accumulation: {[batch_size, accumulate]}. "
+                f"New batch size and accumulation: {[new_batch_size, new_accumulate]}"
+            )
+
+        return new_batch_size, new_accumulate
 
     def rescale_gradient_accumulation(
         self, batch_size: int, accumulate: int, image_size: int
