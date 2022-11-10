@@ -2,7 +2,10 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 from sparseml.pytorch.optim import ScheduledModifierManager
+from sparseml.pytorch.utils import SparsificationGroupLogger
 
+from train import RANK
+from utils.loggers import Loggers
 from utils.neural_magic.utils import load_ema
 from utils.torch_utils import ModelEMA
 
@@ -65,6 +68,7 @@ class SparseTrainManager(object):
 
     def initialize(
         self,
+        loggers: Loggers,
         scaler: torch.cuda.amp.GradScaler,
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler._LRScheduler,
@@ -80,6 +84,11 @@ class SparseTrainManager(object):
         """
         Update objects controlling the training process for sparse training
         """
+
+        self.initialize_loggers(loggers)
+        self.log_console_info(
+            "Sparse training detected. Wrapping training process with SparseML"
+        )
 
         # If resumed run, apply recipe structure up to last epoch run. Structure can
         # include QAT and layer thinning
@@ -97,15 +106,59 @@ class SparseTrainManager(object):
         # If recipe contains lr modifiers, turn off native lr scheduler
         if self.train_manager.learning_rate_modifiers:
             scheduler = None
+            self.log_console_info(
+                "Disabling LR scheduler, managing LR using SparseML recipe"
+            )
 
         # If recipe contains epoch range modifiers, overwrite epoch range
         if self.train_manager.epoch_modifiers and self.train_manager.max_epochs:
             epochs = self.train_manager.max_epochs
+            self.log_console_info(
+                f"Overriding total number of training epochs to {epochs}"
+            )
 
         # construct a ToggleableModelEMA from ModelEMA, allowing for disabling for QAT
         ema = load_ema(ema.ema.state_dict(), self.model, **ema_kwargs)
 
         return scaler, scheduler, ema, epochs
+
+    def initialize_loggers(self, loggers: Loggers):
+        """
+        Initialize SparseML console, wandb, and tensorboard loggers from YOLOv5 loggers
+        """
+        # Console logger
+        self.logger = loggers.logger
+
+        # For logging sparse training values (e.g. sparsity %, custom lr schedule, etc.)
+        def _logging_lambda(tag, value, values, step, wall_time, level):
+            if not loggers.wandb or not loggers.wandb.wandb:
+                return
+
+            if value is not None:
+                loggers.wandb.log({tag: value})
+
+            if values:
+                loggers.wandb.log(values)
+
+        self.train_manager.initialize_loggers(
+            [
+                SparsificationGroupLogger(
+                    lambda_func=_logging_lambda,
+                    tensorboard=loggers.tb,
+                )
+            ]
+        )
+
+        # Attach recipe to wandb log
+        if loggers.wandb and loggers.wandb.wandb:
+            artifact = loggers.wandb.wandb.Artifact("recipe", type="recipe")
+            with artifact.new_file("recipe.yaml") as file:
+                file.write(str(self.manager))
+            loggers.wandb.log_artifact(artifact)
+
+    def log_console_info(self, message: str):
+        if RANK in [0, -1]:
+            self.logger.info(f"Neural Magic: {message}")
 
     def qat_active(self, epoch: int) -> bool:
         """

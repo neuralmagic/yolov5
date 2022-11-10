@@ -262,6 +262,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     compute_loss = ComputeLoss(model)  # init loss class
     if sparse_manager: # update run configuration for training-aware sparsification
         scaler, scheduler, ema, epochs = sparse_manager.initialize(
+            loggers=loggers,
             scaler=scaler,
             optimizer=optimizer,
             scheduler=scheduler,
@@ -269,6 +270,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             dataloader=train_loader,
             start_epoch=start_epoch,
             epochs=epochs,
+            rank = RANK,
             resume=resume,
         )
     callbacks.run('on_train_start')
@@ -281,9 +283,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         # Turn off features incompatible with QAT
         if sparse_manager and sparse_manager.qat_active(epoch):
+            sparse_manager.log_console_info(
+                "QAT phase detected. Disabling EMA and AMP if enabled"
+            )
             ema.enabled = False
             amp = False
             sparse_manager.turn_off_scaler(scaler)
+
 
         model.train()
 
