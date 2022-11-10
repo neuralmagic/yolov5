@@ -7,13 +7,13 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 
 from utils.general import colorstr
 from utils.loggers import Loggers
+
 from utils.neural_magic.utils import load_ema
 from utils.torch_utils import ModelEMA
 
 __all__ = ["SparseTrainManager", "maybe_load_sparse_model"]
 
 RANK = int(os.getenv("RANK", -1))
-
 
 class SparseTrainManager(object):
     """
@@ -66,7 +66,7 @@ class SparseTrainManager(object):
         # thinning
         if self.checkpoint_manager:
             self.checkpoint_manager.apply_structure(
-                self.model, last_epoch if last_epoch > -1 else float("inf")
+                self.model, last_epoch if last_epoch >= 0 else float("inf")
             )
 
     def initialize(

@@ -289,7 +289,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             amp = False
             sparse_manager.turn_off_scaler(scaler)
 
-
         model.train()
 
         # Update image weights (optional, single-GPU only)
