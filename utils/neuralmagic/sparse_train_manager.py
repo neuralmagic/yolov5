@@ -13,12 +13,12 @@ from utils.loggers import Loggers
 from utils.neural_magic.utils import ToggleableModelEMA, load_ema
 from utils.torch_utils import ModelEMA, de_parallel
 
-__all__ = ["SparseTrainManager", "maybe_load_sparse_model"]
+__all__ = ["SparsificationManager", "maybe_load_sparsified_model"]
 
 RANK = int(os.getenv("RANK", -1))
 
 
-class SparseTrainManager(object):
+class SparsificationManager(object):
     """
     Class for managing train state during sparse training with Neural Magic
 
@@ -296,7 +296,7 @@ class SparseTrainManager(object):
         return ckpt
 
 
-def maybe_load_sparse_model(
+def maybe_load_sparsified_model(
     model: torch.nn.Module,
     ckpt: Dict[str, Any],
     train_recipe: str,
@@ -304,7 +304,7 @@ def maybe_load_sparse_model(
 ):
     """
     If sparse training or checkpoint detected, load sparse model and return
-    SparseTrainManager object. Otherwise do nothing.
+    SparsificationManager object. Otherwise do nothing.
 
     :param model: skeleton model
     :param ckpt: loaded checkpoint
@@ -318,7 +318,7 @@ def maybe_load_sparse_model(
         if ckpt["ema"]:
             ckpt["ema"] = load_ema(ckpt["ema"], model)
 
-        sparse_manager = SparseTrainManager(
+        sparse_manager = SparsificationManager(
             model,
             train_recipe,
             recipe_args,
