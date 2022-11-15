@@ -10,6 +10,7 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 from utils.autobatch import check_train_batch_size
 from utils.general import colorstr
 from utils.loggers import Loggers
+from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.neuralmagic.utils import ToggleableModelEMA, load_ema
 from utils.torch_utils import ModelEMA, de_parallel
 
@@ -403,6 +404,9 @@ def maybe_create_sparsification_manager(
         in the recipe with (i.e. num_epochs, init_lr)
     """
     if ckpt.get("checkpoint_recipe") or train_recipe:
+
+        # update bottleneck modules to have quantizable add nodes
+        model = update_model_bottlenecks(model)
 
         # reconstruct ToggleableModelEMA from state dictionary
         if ckpt["ema"]:
