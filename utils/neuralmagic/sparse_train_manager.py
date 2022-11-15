@@ -17,8 +17,6 @@ __all__ = ["SparsificationManager", "maybe_create_sparsification_manager"]
 
 RANK = int(os.getenv("RANK", -1))
 
-# TODO: quantize add
-
 
 class SparsificationManager(object):
     """
