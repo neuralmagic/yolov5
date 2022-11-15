@@ -289,7 +289,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         # Turn off features incompatible with QAT
         if sparsification_manager and sparsification_manager.starting_qat(epoch):
-            sparsification_manager.disable_ema_amp(ema, amp, scaler)
+            ema, amp, scaler = sparsification_manager.disable_ema_amp(ema, amp, scaler)
             # Rescale batch size for QAT
             if opt.batch_size == -1:
                 batch_size, accumulate = sparsification_manager.rescale_gradient_accumulation(
@@ -392,7 +392,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                                 batch_size=batch_size // WORLD_SIZE * 2,
                                                 imgsz=imgsz,
                                                 half=amp,
-                                                model=ema.ema,
+                                                model=ema.ema if not sparsification_manager else model,
                                                 single_cls=single_cls,
                                                 dataloader=val_loader,
                                                 save_dir=save_dir,
@@ -450,7 +450,9 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 strip_optimizer(f) if not sparsification_manager else sparsification_manager.strip_sparsified_optimizer(f)  # strip optimizers
                 if f is best:
                     LOGGER.info(f'\nValidating {f}...')
-                    model = attempt_load(f, device).half()
+                    model = attempt_load(f, device, fuse=not sparsification_manager)
+                    if amp:
+                        model.half()
                     results, _, _ = validate.run(
                         data_dict,
                         batch_size=batch_size // WORLD_SIZE * 2,
@@ -464,7 +466,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                         verbose=True,
                         plots=plots,
                         callbacks=callbacks,
-                        compute_loss=compute_loss)  # val best model with plots
+                        compute_loss=compute_loss,
+                        half=amp)  # val best model with plots
                     if is_coco:
                         callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness, fi)
 

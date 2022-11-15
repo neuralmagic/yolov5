@@ -74,5 +74,5 @@ def load_sparsified_model(
     )
 
     # Load state dict
-    model.load_state_dict(ckpt["ema"] or ckpt["model"], strict=True).half()
+    model.load_state_dict(ckpt["ema"] or ckpt["model"], strict=True)
     return model

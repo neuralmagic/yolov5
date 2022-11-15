@@ -231,7 +231,7 @@ class SparsificationManager(object):
 
     def disable_ema_amp(
         self, ema: ToggleableModelEMA, amp: bool, scaler: torch.cuda.amp.GradScaler
-    ):
+    ) -> Tuple[ToggleableModelEMA, bool, torch.cuda.amp.GradScaler]:
         """
         Disable EMA and AMP if active, as they're not compatible with QAT
         """
@@ -243,6 +243,8 @@ class SparsificationManager(object):
             self.log_console("Turning off AMP (not supported with QAT)")
             amp = False
             scaler._enabled = False
+
+        return ema, amp, scaler
 
     def rescale_gradient_accumulation(
         self, batch_size: int, accumulate: int, image_size: int
