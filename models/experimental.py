@@ -73,11 +73,18 @@ class Ensemble(nn.ModuleList):
 def attempt_load(weights, device=None, inplace=True, fuse=True):
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     from models.yolo import Detect, Model
+    from utils.neuralmagic import sparsezoo_download, load_sparsified_model
 
     model = Ensemble()
     for w in weights if isinstance(weights, list) else [weights]:
-        ckpt = torch.load(attempt_download(w), map_location='cpu')  # load
-        ckpt = (ckpt.get('ema') or ckpt['model']).to(device).float()  # FP32 model
+        ckpt = torch.load(attempt_download(w) if not str(w).startswith("zoo:") 
+                else sparsezoo_download(w), map_location='cpu')  # load
+
+        ckpt = (
+            (ckpt.get('ema') or ckpt['model']).to(device).float() 
+            if not ckpt["checkpoint_recipe"]
+            else load_sparsified_model(ckpt, device=device or "cpu")
+        ) # FP32 model
 
         # Model compatibility updates
         if not hasattr(ckpt, 'stride'):

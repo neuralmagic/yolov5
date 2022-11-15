@@ -10,10 +10,10 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 from utils.autobatch import check_train_batch_size
 from utils.general import colorstr
 from utils.loggers import Loggers
-from utils.neural_magic.utils import ToggleableModelEMA, load_ema
+from utils.neuralmagic.utils import ToggleableModelEMA, load_ema
 from utils.torch_utils import ModelEMA, de_parallel
 
-__all__ = ["SparsificationManager", "maybe_load_sparsified_model"]
+__all__ = ["SparsificationManager", "maybe_create_sparsification_manager"]
 
 RANK = int(os.getenv("RANK", -1))
 
@@ -97,7 +97,7 @@ class SparsificationManager(object):
 
         # initialize SparseML loggers, including recipe modifier loggers
         self.initialize_loggers(loggers)
-        self.log_console_info(
+        self.log_console(
             "Sparse training detected. Wrapping training process with SparseML"
         )
 
@@ -114,14 +114,14 @@ class SparsificationManager(object):
         # If recipe contains lr modifiers, turn off native lr scheduler
         if self.train_manager.learning_rate_modifiers:
             scheduler = None
-            self.log_console_info(
+            self.log_console(
                 "Disabling LR scheduler, managing LR using SparseML recipe"
             )
 
         # If recipe contains epoch range modifiers, overwrite epoch range
         if self.train_manager.epoch_modifiers and self.train_manager.max_epochs:
             epochs = self.train_manager.max_epochs
-            self.log_console_info(
+            self.log_console(
                 "Overriding total number of training epochs with value from recipe: "
                 f"{epochs}"
             )
@@ -165,9 +165,39 @@ class SparsificationManager(object):
                 file.write(str(self.train_manager))
             loggers.wandb.wandb.log_artifact(artifact)
 
-    def log_console_info(self, message: str):
+    def log_console(self, message: str, level: str = "info"):
+        """
+        Log sparsification-related messages to the console
+
+        :param message: message to be logged
+        :param level: level to be logged at
+        """
+        if RANK in [0, -1]:
+            if level == "warning":
+                self.logger.warning(
+                    f"{colorstr('Neural Magic: ')}{colorstr('yellow', 'warning - ')}"
+                    f"{message}"
+                )
+            else:  # info be default
+                self.logger.info(f"{colorstr('Neural Magic: ')}{message}")
+
+    def log_console_warning(self, message: str):
         if RANK in [0, -1]:
             self.logger.info(f"{colorstr('Neural Magic: ')}{message}")
+
+    def get_final_checkpoint_recipe(self) -> ScheduledModifierManager:
+        """
+        Return the final ScheduledModifierManager that would be saved with final
+        models. Represents all recipes applied to model, allowing for multiple stages
+        of sparse training
+        """
+        return (
+            ScheduledModifierManager.compose_staged(
+                self.checkpoint_manager, self.train_manager
+            )
+            if self.checkpoint_manager and self.train_manager
+            else self.train_manager or self.checkpoint_manager
+        )
 
     def starting_qat(self, epoch: int) -> bool:
         """
@@ -205,12 +235,12 @@ class SparsificationManager(object):
         """
         Disable EMA and AMP if active, as they're not compatible with QAT
         """
-        self.log_console_info("Starting QAT phase")
+        self.log_console("Starting QAT phase")
         if ema.enabled:
-            self.log_console_info("Turning off EMA (not supported with QAT)")
+            self.log_console("Turning off EMA (not supported with QAT)")
             ema.enabled = False
         if amp:
-            self.log_console_info("Turning off AMP (not supported with QAT)")
+            self.log_console("Turning off AMP (not supported with QAT)")
             amp = False
             scaler._enabled = False
 
@@ -225,7 +255,8 @@ class SparsificationManager(object):
         """
         # Temporary copy of the model with QAT applied
         quant_model_copy = deepcopy(de_parallel(self.model))
-        self.train_manager.apply_structure(quant_model_copy, float("inf"))
+        train_manager_copy = ScheduledModifierManager.from_yaml(str(self.train_manager))
+        train_manager_copy.apply_structure(quant_model_copy, float("inf"))
 
         # Calculate maximum batch size that will fit in memory
         new_batch_size = check_train_batch_size(quant_model_copy, image_size, False)
@@ -233,27 +264,21 @@ class SparsificationManager(object):
         # Calculate batch size closest to maximum that can be accumulated to maintain
         # the original effective batch size. Note that if the original batch size is odd
         # then the effective batch size will be incremented by 1
-        batch_size = batch_size if batch_size % 2 == 0 else batch_size + 1
-        batch_size_ratio = math.floor(batch_size / new_batch_size)
-        closest_divisor = next(
-            divisor
-            for divisor in range(batch_size_ratio, 1, -1)
-            if batch_size % divisor == 0
-        )
-        new_batch_size = batch_size // closest_divisor
-        new_accumulate = math.floor((batch_size * accumulate) // new_batch_size)
-        new_batch_size = batch_size // new_accumulate
 
-        self.log_console_info(
+        new_accumulate = round(batch_size / new_batch_size)
+        new_batch_size = round(batch_size / new_accumulate)
+
+        self.log_console(
             f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
             "accumulation steps for QAT"
         )
 
         if new_accumulate * new_batch_size != batch_size * accumulate:
-            raise RuntimeError(
+            self.log_console(
                 "New effective batch size doesn't match previous effective batch size. "
-                f"Previous batch size and accumulation: {[batch_size, accumulate]}. "
-                f"New batch size and accumulation: {[new_batch_size, new_accumulate]}"
+                f"Previous effective batch size: {batch_size * accumulate}. "
+                f"New effective batch size: {new_batch_size * new_accumulate}",
+                level="warning",
             )
 
         return new_batch_size, new_accumulate
@@ -268,18 +293,9 @@ class SparsificationManager(object):
         :param final_epoch: True if called after last training epoch
         :param ema_enabled: True if ema is turned on
         """
-        if final_epoch:
-            # save model with a checkpoint recipe representing all recipes applied to
-            # model, allowing for multiple stages of sparse training
-            checkpoint_recipe = (
-                ScheduledModifierManager.compose_staged(
-                    self.checkpoint_manager, self.train_manager
-                )
-                if self.checkpoint_manager
-                else self.train_manager
-            )
-        else:
-            checkpoint_recipe = None
+        # checkpoint recipe saved with final models, for state re-construction upon
+        # loading for validation or additional stage of sparsification
+        checkpoint_recipe = self.get_final_checkpoint_recipe() if final_epoch else None
 
         # Pickling is not supported for quantized models for a subset of the supported
         # torch versions, thus all sparse models are saved via their state dict
@@ -288,20 +304,50 @@ class SparsificationManager(object):
             "yaml": ckpt["model"].yaml,
             "ema": ckpt["ema"].state_dict() if ema_enabled else None,
             "updates": ckpt["updates"] if ema_enabled else None,
-            "checkpoint_recipe": str(checkpoint_recipe),
+            "checkpoint_recipe": str(checkpoint_recipe)
+            if checkpoint_recipe
+            else None,  # TODO: save checkpoint recipe for best? do it in strip_optimizer
             "epoch": -1 if final_epoch else ckpt["epoch"],
         }
         ckpt.update(sparseml_dict_update)
 
         return ckpt
 
+    def strip_sparsified_optimizer(
+        self, checkpoint_path: str = "best.pt", save_name: Optional[str] = None
+    ):
+        """
+        Updates the saved state dict to reflect a final saved state. Fulfills the same
+        function as utils.general.strip_optimizer() for sparsified checkpoints
 
-def maybe_load_sparsified_model(
+        :param checkpoint_path: path to the checkpoint to be loaded
+        :param save_name: optional path to save the "stripped" checkpoint to
+        """
+        ckpt = torch.load(checkpoint_path)
+
+        if ckpt.get("ema"):
+            ckpt["model"] = ckpt["ema"]
+        for key in "optimizer", "best_fitness", "ema", "updates":
+            if key in ckpt:
+                ckpt[key] = None
+
+        ckpt["checkpoint_recipe"] = str(self.get_final_checkpoint_recipe())
+
+        torch.save(ckpt, save_name or checkpoint_path)
+
+        megabytes = os.path.getsize(save_name or checkpoint_path) / 1e6
+        self.log_console(
+            f"Optimizer stripped from {checkpoint_path},"
+            f"{f' saved as {save_name},' if save_name else ''} {megabytes:.1f}MB"
+        )
+
+
+def maybe_create_sparsification_manager(
     model: torch.nn.Module,
     ckpt: Dict[str, Any],
     train_recipe: str,
     recipe_args: Optional[Union[Dict[str, Any], str]],
-):
+) -> Optional[SparsificationManager]:
     """
     If sparse training or checkpoint detected, load sparse model and return
     SparsificationManager object. Otherwise do nothing.
@@ -318,14 +364,14 @@ def maybe_load_sparsified_model(
         if ckpt["ema"]:
             ckpt["ema"] = load_ema(ckpt["ema"], model)
 
-        sparse_manager = SparsificationManager(
+        sparsification_manager = SparsificationManager(
             model,
             train_recipe,
             recipe_args,
             ckpt.get("checkpoint_recipe"),
             ckpt["epoch"],
         )
-        return sparse_manager
+        return sparsification_manager
 
     else:
         return None
