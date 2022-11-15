@@ -74,7 +74,7 @@ def update_model_bottlenecks(model: torch.nn.Module) -> torch.nn.Module:
     for name, param in model.named_modules():
 
         if isinstance(param, Bottleneck):
-            found_bottlenecks.append(name)
+            found_bottlenecks.append(name.split("."))
 
             # Backwards deducing Bottleneck __init__ args. Refer to
             # models.common.Bottleneck for details
