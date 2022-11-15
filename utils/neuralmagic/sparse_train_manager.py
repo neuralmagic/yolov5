@@ -17,6 +17,8 @@ __all__ = ["SparsificationManager", "maybe_create_sparsification_manager"]
 
 RANK = int(os.getenv("RANK", -1))
 
+# TODO: quantize add
+
 
 class SparsificationManager(object):
     """
@@ -73,6 +75,39 @@ class SparsificationManager(object):
             self.checkpoint_manager.apply_structure(
                 self.model, last_epoch if last_epoch >= 0 else float("inf")
             )
+
+    def check_for_invalid_state(self):
+        """
+        Checks that the training sparsification recipe (or lack of) is a valid recipe
+        for the loaded model. This primarily applies when the loaded model is already
+        sparsified.
+        """
+
+        # Checking valid state for pruned models
+        if self.checkpoint_manager and self.checkpoint_manager.pruning_modifiers:
+            if not self.train_manager:
+                self.log_console(
+                    "Model in danger of de-sparsification. Pruned model was loaded, "
+                    "but no sparsification recipe detected. A recipe with a "
+                    "ConstantPruningModifier can be used to maintain model sparsity "
+                    "while training"
+                )
+            elif not self.train_manager.pruning_modifiers:
+                self.log_console(
+                    "Model in danger of de-sparsification. Pruned model was loaded, "
+                    "but no pruning modifiers detected in sparsification recipe. A "
+                    "recipe with a ConstantPruningModifier can be used to maintain "
+                    "model sparsity while training"
+                )
+
+        # Checking valid state for quantized models
+        if self.checkpoint_manager and self.checkpoint_manager.quantization_modifiers:
+            if self.train_manager and self.train_manager.quantization_modifiers:
+                raise ValueError(
+                    "Quantization can not be applied more than once. Loaded quantized "
+                    "model from checkpoint and detected quantization modifier in "
+                    "sparsification recipe. This is unsupported behavior. Ending run."
+                )
 
     def initialize(
         self,
@@ -375,6 +410,9 @@ def maybe_create_sparsification_manager(
             ckpt.get("checkpoint_recipe"),
             ckpt["epoch"],
         )
+
+        sparsification_manager.check_for_invalid_state()
+
         return sparsification_manager
 
     else:

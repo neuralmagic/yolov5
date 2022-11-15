@@ -291,13 +291,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         if sparsification_manager and sparsification_manager.starting_qat(epoch):
             ema, amp, scaler = sparsification_manager.disable_ema_amp(ema, amp, scaler)
             # Rescale batch size for QAT
-            if opt.batch_size == -1:
-                batch_size, accumulate = sparsification_manager.rescale_gradient_accumulation(
-                    batch_size=batch_size, 
-                    accumulate=accumulate, 
-                    image_size=imgsz
-                )
-                train_loader, dataset, val_loader = _create_dataloaders()
+            batch_size, accumulate = sparsification_manager.rescale_gradient_accumulation(
+                batch_size=batch_size, 
+                accumulate=accumulate, 
+                image_size=imgsz
+            )
+            train_loader, dataset, val_loader = _create_dataloaders()
 
         model.train()
 
