@@ -68,8 +68,8 @@ def load_sparsified_model(
     ckpt = ckpt if isinstance(ckpt, dict) else torch.load(ckpt, map_location=device)
 
     # Construct randomly initialized model model and apply sparse structure modifiers
-    model = Yolov5Model(ckpt.get("yaml")).to(device)
-    model = update_model_bottlenecks(model)
+    model = Yolov5Model(ckpt.get("yaml"))
+    model = update_model_bottlenecks(model).to(device)
     checkpoint_manager = ScheduledModifierManager.from_yaml(ckpt["checkpoint_recipe"])
     checkpoint_manager.apply_structure(
         model, ckpt["epoch"] if ckpt["epoch"] >= 0 else float("inf")

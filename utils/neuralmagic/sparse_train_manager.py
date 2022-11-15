@@ -392,6 +392,7 @@ def maybe_create_sparsification_manager(
     ckpt: Dict[str, Any],
     train_recipe: str,
     recipe_args: Optional[Union[Dict[str, Any], str]],
+    device: Union[str, torch.device],
 ) -> Optional[SparsificationManager]:
     """
     If sparse training or checkpoint detected, load sparse model and return
@@ -402,11 +403,12 @@ def maybe_create_sparsification_manager(
     :param train_recipe: yaml string or path to recipe to apply during training
     :param recipe_args: additional arguments to override any root variables
         in the recipe with (i.e. num_epochs, init_lr)
+    :param device: device to load model to
     """
     if ckpt.get("checkpoint_recipe") or train_recipe:
 
         # update bottleneck modules to have quantizable add nodes
-        model = update_model_bottlenecks(model)
+        model = update_model_bottlenecks(model).to(device)
 
         # reconstruct ToggleableModelEMA from state dictionary
         if ckpt["ema"]:
