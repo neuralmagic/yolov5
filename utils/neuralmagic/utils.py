@@ -58,8 +58,7 @@ def load_sparsified_model(
 ) -> torch.nn.Module:
     """
     From a sparisifed checkpoint, loads a model with the saved weights and
-    sparsification recipe applied. Fulfills the same function as
-    models.experimental.attempt_load() for sparsified checkpoints
+    sparsification recipe applied
 
     :param ckpt: either a loaded checkpoint or the path to a saved checkpoint
     :param device: device to load the model onto

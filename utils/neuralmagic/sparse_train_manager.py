@@ -265,6 +265,8 @@ class SparsificationManager(object):
         # the original effective batch size. Note that if the original batch size is odd
         # then the effective batch size will be incremented by 1
 
+        # Roughly calculate batch size by rounding. In many circumstances this can
+        # result in an effective batch size that is 1-few off from the original
         new_accumulate = round(batch_size / new_batch_size)
         new_batch_size = round(batch_size / new_accumulate)
 
