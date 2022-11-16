@@ -63,9 +63,12 @@ class SparsificationManager(object):
         )
 
         # Training manager for current training run
-        self.train_manager = ScheduledModifierManager.from_yaml(
-            file_path=train_recipe,
-            recipe_variables=recipe_args if train_recipe else None,
+        self.train_manager = (
+            ScheduledModifierManager.from_yaml(
+                file_path=train_recipe, recipe_variables=recipe_args
+            )
+            if train_recipe
+            else None,
         )
 
         # Apply recipe structure from checkpoint recipe. Can include QAT and layer
