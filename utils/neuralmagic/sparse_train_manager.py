@@ -349,17 +349,16 @@ class SparsificationManager(object):
         train_manager_copy = ScheduledModifierManager.from_yaml(str(self.train_manager))
         train_manager_copy.apply_structure(quant_model_copy, float("inf"))
 
+        # batch size to maintain
+        effective_batch_size = batch_size * accumulate
+
         # Calculate maximum batch size that will fit in memory
         new_batch_size = check_train_batch_size(quant_model_copy, image_size, False)
 
-        # Calculate batch size closest to maximum that can be accumulated to maintain
-        # the original effective batch size. Note that if the original batch size is odd
-        # then the effective batch size will be incremented by 1
-
         # Roughly calculate batch size by rounding. In many circumstances this can
         # result in an effective batch size that is 1-few off from the original
-        new_accumulate = max(round(batch_size / new_batch_size), 1)
-        new_batch_size = max(round(batch_size / new_accumulate), 1)
+        new_accumulate = max(round(effective_batch_size / new_batch_size), 1)
+        new_batch_size = max(round(effective_batch_size / new_accumulate), 1)
 
         self.log_console(
             f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
@@ -466,12 +465,13 @@ class SparsificationManager(object):
         ckpt["checkpoint_recipe"] = str(self.get_final_checkpoint_recipe())
 
         torch.save(ckpt, save_name or checkpoint_path)
-        
+
         megabytes = os.path.getsize(save_name or checkpoint_path) / 1e6
         self.log_console(
             f"Optimizer stripped from {checkpoint_path},"
             f"{f' saved as {save_name},' if save_name else ''} {megabytes:.1f}MB"
         )
+
 
 def maybe_create_sparsification_manager(
     model: torch.nn.Module,
