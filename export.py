@@ -151,7 +151,7 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
 
     if sparsified:
 
-        save_dir = f.parent / "DeepSparse_Deployment" # Update export directory
+        save_dir = f.parents[1] / "DeepSparse_Deployment" # Update export directory
         save_dir.mkdir(exist_ok=True)
         f = save_dir / f.name 
 
