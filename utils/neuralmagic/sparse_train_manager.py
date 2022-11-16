@@ -68,7 +68,7 @@ class SparsificationManager(object):
                 file_path=train_recipe, recipe_variables=recipe_args
             )
             if train_recipe
-            else None,
+            else None
         )
 
         # Apply recipe structure from checkpoint recipe. Can include QAT and layer
@@ -130,7 +130,8 @@ class SparsificationManager(object):
         Update objects controlling the training process for sparse training
         """
         # Wrap model for sparse training modifiers from recipe
-        self.train_manager.initialize(module=self.model, epoch=start_epoch)
+        if self.train_manager:
+            self.train_manager.initialize(module=self.model, epoch=start_epoch)
 
         # initialize SparseML loggers, including recipe modifier loggers
         self.initialize_loggers(loggers)
