@@ -8,17 +8,12 @@ from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
 
 from utils.autobatch import check_train_batch_size
-from utils.general import colorstr
 from utils.loggers import Loggers
 from utils.neuralmagic.quantization import update_model_bottlenecks
-from utils.neuralmagic.utils import ToggleableModelEMA, load_ema
+from utils.neuralmagic.utils import ToggleableModelEMA, load_ema, nm_log_console
 from utils.torch_utils import ModelEMA, de_parallel
 
 __all__ = ["SparsificationManager", "maybe_create_sparsification_manager"]
-
-RANK = int(os.getenv("RANK", -1))
-
-# TODO: quantize add
 
 
 class SparsificationManager(object):
@@ -43,6 +38,7 @@ class SparsificationManager(object):
         checkpoint_recipe: Optional[str] = None,
         last_epoch: int = 0,
     ):
+        self.loggers = None
         self.qat_started = False
         self.current_phase = None
         self.passed_phases = []
@@ -144,14 +140,18 @@ class SparsificationManager(object):
                     "Pruned model was loaded, but no sparsification recipe detected - "
                     "model may revert to dense state. A recipe with a "
                     "ConstantPruningModifier can be used to maintain model sparsity "
-                    "while training"
+                    "while training",
+                    logger=self.loggers,
+                    level="warning",
                 )
             elif not self.has_pruning_phase:
                 self.log_console(
                     "Pruned model was loaded, but no pruning modifiers detected in "
                     "sparsification recipe - model may revert to dense state. A "
                     "recipe with a ConstantPruningModifier can be used to maintain "
-                    "model sparsity while training"
+                    "model sparsity while training",
+                    logger=self.loggers,
+                    level="warning",
                 )
 
         # Checking valid state for quantized models
@@ -254,26 +254,6 @@ class SparsificationManager(object):
                 file.write(str(self.train_manager))
             loggers.wandb.wandb.log_artifact(artifact)
 
-    def log_console(self, message: str, level: str = "info"):
-        """
-        Log sparsification-related messages to the console
-
-        :param message: message to be logged
-        :param level: level to be logged at
-        """
-        if RANK in [0, -1]:
-            if level == "warning":
-                self.logger.warning(
-                    f"{colorstr('Neural Magic: ')}{colorstr('yellow', 'warning - ')}"
-                    f"{message}"
-                )
-            else:  # info be default
-                self.logger.info(f"{colorstr('Neural Magic: ')}{message}")
-
-    def log_console_warning(self, message: str):
-        if RANK in [0, -1]:
-            self.logger.info(f"{colorstr('Neural Magic: ')}{message}")
-
     def get_final_checkpoint_recipe(self) -> ScheduledModifierManager:
         """
         Return the final ScheduledModifierManager that would be saved with final
@@ -312,11 +292,14 @@ class SparsificationManager(object):
         else:
             return False
 
-    def is_qat_recipe(self) -> bool:
+    def log_console(self, message: str, level: str = "info"):
         """
-        Returns true if the training recipe contains a QAT modifier
+        Pass through to nm_log_console with manager logger, if initialized
+
+        :param message: message to be logged
+        :param level: level to be logged at
         """
-        return bool(self.train_manager.quantization_modifiers)
+        nm_log_console(message=message, logger=self.loggers, level=level)
 
     def disable_ema_amp(
         self, ema: ToggleableModelEMA, amp: bool, scaler: torch.cuda.amp.GradScaler
