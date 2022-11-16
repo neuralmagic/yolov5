@@ -206,41 +206,41 @@ class SparsificationManager(object):
                 distillation_teacher=distillation_teacher,
             )
 
-        self.steps_per_epoch = len(dataloader)
+            self.steps_per_epoch = len(dataloader)
 
-        # initialize SparseML loggers, including recipe modifier loggers
-        self.initialize_loggers(loggers)
-        self.log_console(
-            "Sparse training detected. Wrapping training process with SparseML"
-        )
-
-        # If resumed run, apply recipe structure up to last epoch run. Structure can
-        # include QAT and layer thinning
-        if resume:
-            self.train_manager.apply_structure(self.model, start_epoch - 1)
-
-        # Wrap the scaler for sparse training modifiers from recipe
-        scaler = self.train_manager.modify(
-            self.model,
-            optimizer,
-            steps_per_epoch=self.steps_per_epoch,
-            wrap_optim=scaler,
-        )
-
-        # If recipe contains lr modifiers, turn off native lr scheduler
-        if self.train_manager.learning_rate_modifiers:
-            scheduler = None
+            # initialize SparseML loggers, including recipe modifier loggers
+            self.initialize_loggers(loggers)
             self.log_console(
-                "Disabling LR scheduler, managing LR using SparseML recipe"
+                "Sparse training detected. Wrapping training process with SparseML"
             )
 
-        # If recipe contains epoch range modifiers, overwrite epoch range
-        if self.train_manager.epoch_modifiers and self.train_manager.max_epochs:
-            epochs = self.train_manager.max_epochs
-            self.log_console(
-                "Overriding total number of training epochs with value from recipe: "
-                f"{epochs}"
+            # If resumed run, apply recipe structure up to last epoch run. Structure can
+            # include QAT and layer thinning
+            if resume:
+                self.train_manager.apply_structure(self.model, start_epoch - 1)
+
+            # Wrap the scaler for sparse training modifiers from recipe
+            scaler = self.train_manager.modify(
+                self.model,
+                optimizer,
+                steps_per_epoch=self.steps_per_epoch,
+                wrap_optim=scaler,
             )
+
+            # If recipe contains lr modifiers, turn off native lr scheduler
+            if self.train_manager.learning_rate_modifiers:
+                scheduler = None
+                self.log_console(
+                    "Disabling LR scheduler, managing LR using SparseML recipe"
+                )
+
+            # If recipe contains epoch range modifiers, overwrite epoch range
+            if self.train_manager.epoch_modifiers and self.train_manager.max_epochs:
+                epochs = self.train_manager.max_epochs
+                self.log_console(
+                    "Overriding total number of training epochs with value from "
+                    f"recipe: {epochs}"
+                )
 
         # construct a ToggleableModelEMA from ModelEMA, allowing for disabling for QAT
         ema = load_ema(ema.ema.state_dict(), self.model, **ema_kwargs)
@@ -302,6 +302,11 @@ class SparsificationManager(object):
         """
         Returns true if this is the first epoch QAT is turned on
         """
+        # Continued training of quantized model
+        if self.quantized_checkpoint:
+            return True
+
+        # Training with a quantization recipe
         if not self.qat_started:
             self.qat_started = self.qat_active(epoch)
             return self.qat_started
@@ -314,7 +319,7 @@ class SparsificationManager(object):
 
         :param epoch: epoch to check QAT status for
         """
-        if self.train_manager.quantization_modifiers:
+        if self.has_qat_phase:
             qat_start = min(
                 [mod.start_epoch for mod in self.train_manager.quantization_modifiers]
             )

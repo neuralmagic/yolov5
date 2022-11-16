@@ -138,7 +138,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             else None
         )
     amp = check_amp(model)  # check AMP
-    teacher_model = attempt_load(opt.teacher_weights) if opt.teacher_weights and sparsification_manager else None
+    teacher_model = attempt_load(opt.teacher_weights) if opt.teacher_weights and sparsification_manager.train_manager else None
 
     # Freeze
     freeze = [f'model.{x}.' for x in (freeze if len(freeze) > 1 else range(freeze[0]))]  # layers to freeze
@@ -294,13 +294,15 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         # Turn off features incompatible with QAT
         if sparsification_manager and sparsification_manager.starting_qat(epoch):
             ema, amp, scaler = sparsification_manager.disable_ema_amp(ema, amp, scaler)
-            # Rescale batch size for QAT
-            batch_size, accumulate = sparsification_manager.rescale_gradient_accumulation(
-                batch_size=batch_size, 
-                accumulate=accumulate, 
-                image_size=imgsz
-            )
-            train_loader, dataset, val_loader = _create_dataloaders()
+
+            if not sparsification_manager.quantized_checkpoint:
+                # Rescale batch size for QAT
+                batch_size, accumulate = sparsification_manager.rescale_gradient_accumulation(
+                    batch_size=batch_size, 
+                    accumulate=accumulate, 
+                    image_size=imgsz
+                )
+                train_loader, dataset, val_loader = _create_dataloaders()
 
         model.train()
 
@@ -348,7 +350,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
             # Forward
             with torch.cuda.amp.autocast(amp):
-                if sparsification_manager and teacher_model:
+                if sparsification_manager.distillation_active and teacher_model:
                     loss, loss_items = sparsification_manager.compute_distillation_loss(epoch, imgs, targets.to(device))
                 else:
                     pred = model(imgs)  # forward

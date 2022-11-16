@@ -87,7 +87,7 @@ def load_sparsified_model(
     return model
 
 
-def nm_log_console(self, message: str, logger: "Logger" = None, level: str = "info"):
+def nm_log_console(message: str, logger: "Logger" = None, level: str = "info"):
     """
     Log sparsification-related messages to the console
 
