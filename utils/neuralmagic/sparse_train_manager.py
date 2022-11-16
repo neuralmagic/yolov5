@@ -44,6 +44,8 @@ class SparsificationManager(object):
         last_epoch: int = 0,
     ):
         self.qat_started = False
+        self.current_phase = None
+        self.passed_phases = []
 
         # Recipes can be sensitive to module names, target correct submodule if parallel
         self.model = (
@@ -81,6 +83,53 @@ class SparsificationManager(object):
                 self.model, last_epoch if last_epoch >= 0 else float("inf")
             )
 
+        self.set_sparsification_info()
+        self.check_for_invalid_state()
+
+    def set_sparsification_info(self):
+        """
+        Set attributes relating to sparsification in run
+        """
+        self.has_pruning_phase = (
+            self.train_manager and self.train_manager.pruning_modifiers
+        )
+        self.has_qat_phase = (
+            self.train_manager and self.train_manager.quantization_modifiers
+        )
+        self.pruned_checkpoint = (
+            self.checkpoint_manager and self.checkpoint_manager.pruning_modifiers
+        )
+        self.quantized_checkpoint = (
+            self.checkpoint_manager and self.checkpoint_manager.quantization_modifiers
+        )
+
+        self.first_pruning_epoch = (
+            math.floor(
+                min([mod.start_epoch for mod in self.train_manager.pruning_modifiers])
+            )
+            if self.has_pruning_phase
+            else None
+        )
+        self.last_pruning_epoch = (
+            math.floor(
+                min([mod.end_epoch for mod in self.train_manager.pruning_modifiers])
+            )
+            if self.has_pruning_phase
+            else None
+        )
+        self.first_qat_epoch = (
+            math.floor(
+                min(
+                    [
+                        mod.start_epoch
+                        for mod in self.train_manager.quantization_modifiers
+                    ]
+                )
+            )
+            if self.has_qat_phase
+            else None
+        )
+
     def check_for_invalid_state(self):
         """
         Checks that the training sparsification recipe (or lack of) is a valid recipe
@@ -89,7 +138,7 @@ class SparsificationManager(object):
         """
 
         # Checking valid state for pruned models
-        if self.checkpoint_manager and self.checkpoint_manager.pruning_modifiers:
+        if self.pruned_checkpoint:
             if not self.train_manager:
                 self.log_console(
                     "Pruned model was loaded, but no sparsification recipe detected - "
@@ -97,7 +146,7 @@ class SparsificationManager(object):
                     "ConstantPruningModifier can be used to maintain model sparsity "
                     "while training"
                 )
-            elif not self.train_manager.pruning_modifiers:
+            elif not self.has_pruning_phase:
                 self.log_console(
                     "Pruned model was loaded, but no pruning modifiers detected in "
                     "sparsification recipe - model may revert to dense state. A "
@@ -106,13 +155,12 @@ class SparsificationManager(object):
                 )
 
         # Checking valid state for quantized models
-        if self.checkpoint_manager and self.checkpoint_manager.quantization_modifiers:
-            if self.train_manager and self.train_manager.quantization_modifiers:
-                raise ValueError(
-                    "Quantization can not be applied more than once. Loaded quantized "
-                    "model from checkpoint and detected quantization modifier in "
-                    "sparsification recipe. This is unsupported behavior. Ending run."
-                )
+        if self.quantized_checkpoint and self.has_qat_phase:
+            raise ValueError(
+                "Quantization can not be applied more than once. Loaded quantized model"
+                "from checkpoint and detected quantization modifier in sparsification"
+                "recipe. This is unsupported behavior. Ending run."
+            )
 
     def initialize(
         self,
@@ -357,6 +405,46 @@ class SparsificationManager(object):
 
         return ckpt
 
+    def maybe_switch_phases(self, epoch: int) -> Tuple[Optional[float], Optional[str]]:
+        """
+        Check if a new phase has been entered. If it has, record the new phase and
+        reset the tracked best fitness. Possible phases are dense, pruned,
+        pruned_quantized, and quantized
+
+        :param epoch: current epoch
+        :return: if new phase entered, then new best_fitness of 0.0 and filename to save
+            best models to is returned. Otherwise, None returned for each
+        """
+        # QAT + Pruning run
+        if self.has_pruning_phase and self.has_qat_phase:
+            if epoch < self.first_pruning_epoch:
+                current_phase = "dense"
+            elif self.first_pruning_epoch <= epoch < self.first_qat_epoch:
+                current_phase = "pruned"
+            else:
+                current_phase = "pruned_quantized"
+
+        # Pruning only run
+        elif self.has_pruning_phase:
+            current_phase = "pruned" if epoch >= self.first_pruning_epoch else "dense"
+
+        # QAT only run
+        elif self.has_qat_phase:
+            current_phase = "quantized" if epoch >= self.first_qat_epoch else "dense"
+
+        # Run with no sparsification modifiers
+        else:
+            current_phase = "dense"
+
+        # Update phase
+        if self.current_phase != current_phase:
+            self.passed_phases.append(current_phase)
+            self.current_phase = current_phase
+
+            return 0.0, f"best_{self.current_phase}.pt"
+
+        return None, None
+
     def strip_sparsified_optimizer(
         self, checkpoint_path: str = "best.pt", save_name: Optional[str] = None
     ):
@@ -378,7 +466,7 @@ class SparsificationManager(object):
         ckpt["checkpoint_recipe"] = str(self.get_final_checkpoint_recipe())
 
         torch.save(ckpt, save_name or checkpoint_path)
-
+        
         megabytes = os.path.getsize(save_name or checkpoint_path) / 1e6
         self.log_console(
             f"Optimizer stripped from {checkpoint_path},"
@@ -419,8 +507,6 @@ def maybe_create_sparsification_manager(
             ckpt.get("checkpoint_recipe"),
             ckpt["epoch"],
         )
-
-        sparsification_manager.check_for_invalid_state()
 
         return sparsification_manager
 
