@@ -288,7 +288,7 @@ class SparsificationManager(object):
             else self.train_manager or self.checkpoint_manager
         )
 
-    def starting_qat(self, epoch: int) -> bool:
+    def starting_qat(self, epoch: float) -> bool:
         """
         Returns true if this is the first epoch QAT is turned on
         """
@@ -298,7 +298,7 @@ class SparsificationManager(object):
         else:
             return False
 
-    def qat_active(self, epoch: int) -> bool:
+    def qat_active(self, epoch: float) -> bool:
         """
         Returns true if QAT is turned on for the given epoch
 
@@ -404,7 +404,9 @@ class SparsificationManager(object):
 
         return ckpt
 
-    def maybe_switch_phases(self, epoch: int) -> Tuple[Optional[float], Optional[str]]:
+    def maybe_switch_phases(
+        self, epoch: float
+    ) -> Tuple[Optional[float], Optional[str]]:
         """
         Check if a new phase has been entered. If it has, record the new phase and
         reset the tracked best fitness. Possible phases are dense, pruned,
