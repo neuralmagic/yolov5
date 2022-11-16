@@ -12,6 +12,7 @@ from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.torch_utils import ModelEMA
 
 __all__ = [
+    "ALMOST_ONE",
     "sparsezoo_download",
     "ToggleableModelEMA",
     "load_ema",
@@ -20,6 +21,7 @@ __all__ = [
 
 
 RANK = int(os.getenv("RANK", -1))
+ALMOST_ONE = 1 - 1e-9  # for incrementing epoch to be applied to recipe
 
 
 class ToggleableModelEMA(ModelEMA):
@@ -79,7 +81,7 @@ def load_sparsified_model(
     model = update_model_bottlenecks(model).to(device)
     checkpoint_manager = ScheduledModifierManager.from_yaml(ckpt["checkpoint_recipe"])
     checkpoint_manager.apply_structure(
-        model, ckpt["epoch"] if ckpt["epoch"] >= 0 else float("inf")
+        model, ckpt["epoch"] + ALMOST_ONE if ckpt["epoch"] >= 0 else float("inf")
     )
 
     # Load state dict
