@@ -358,8 +358,8 @@ class SparsificationManager(object):
 
         # Roughly calculate batch size by rounding. In many circumstances this can
         # result in an effective batch size that is 1-few off from the original
-        new_accumulate = round(batch_size / new_batch_size)
-        new_batch_size = round(batch_size / new_accumulate)
+        new_accumulate = max(round(batch_size / new_batch_size), 1)
+        new_batch_size = max(round(batch_size / new_accumulate), 1)
 
         self.log_console(
             f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
