@@ -35,9 +35,9 @@ class SparsificationManager(object):
     def __init__(
         self,
         model: torch.nn.Module,
-        train_recipe: str,
+        train_recipe: Optional[str],
         recipe_args: Optional[Union[Dict[str, Any], str]],
-        checkpoint_recipe: str = None,
+        checkpoint_recipe: Optional[str] = None,
         last_epoch: int = 0,
     ):
         self.qat_started = False
@@ -63,8 +63,12 @@ class SparsificationManager(object):
         )
 
         # Training manager for current training run
-        self.train_manager = ScheduledModifierManager.from_yaml(
-            file_path=train_recipe, recipe_variables=recipe_args
+        self.train_manager = (
+            ScheduledModifierManager.from_yaml(
+                file_path=train_recipe, recipe_variables=recipe_args
+            )
+            if train_recipe
+            else None
         )
 
         # Apply recipe structure from checkpoint recipe. Can include QAT and layer
@@ -73,6 +77,39 @@ class SparsificationManager(object):
             self.checkpoint_manager.apply_structure(
                 self.model, last_epoch if last_epoch >= 0 else float("inf")
             )
+
+    def check_for_invalid_state(self):
+        """
+        Checks that the training sparsification recipe (or lack of) is a valid recipe
+        for the loaded model. This primarily applies when the loaded model is already
+        sparsified.
+        """
+
+        # Checking valid state for pruned models
+        if self.checkpoint_manager and self.checkpoint_manager.pruning_modifiers:
+            if not self.train_manager:
+                self.log_console(
+                    "Pruned model was loaded, but no sparsification recipe detected - "
+                    "model may revert to dense state. A recipe with a "
+                    "ConstantPruningModifier can be used to maintain model sparsity "
+                    "while training"
+                )
+            elif not self.train_manager.pruning_modifiers:
+                self.log_console(
+                    "Pruned model was loaded, but no pruning modifiers detected in "
+                    "sparsification recipe - model may revert to dense state. A "
+                    "recipe with a ConstantPruningModifier can be used to maintain "
+                    "model sparsity while training"
+                )
+
+        # Checking valid state for quantized models
+        if self.checkpoint_manager and self.checkpoint_manager.quantization_modifiers:
+            if self.train_manager and self.train_manager.quantization_modifiers:
+                raise ValueError(
+                    "Quantization can not be applied more than once. Loaded quantized "
+                    "model from checkpoint and detected quantization modifier in "
+                    "sparsification recipe. This is unsupported behavior. Ending run."
+                )
 
     def initialize(
         self,
@@ -93,7 +130,8 @@ class SparsificationManager(object):
         Update objects controlling the training process for sparse training
         """
         # Wrap model for sparse training modifiers from recipe
-        self.train_manager.initialize(module=self.model, epoch=start_epoch)
+        if self.train_manager:
+            self.train_manager.initialize(module=self.model, epoch=start_epoch)
 
         # initialize SparseML loggers, including recipe modifier loggers
         self.initialize_loggers(loggers)
@@ -375,6 +413,9 @@ def maybe_create_sparsification_manager(
             ckpt.get("checkpoint_recipe"),
             ckpt["epoch"],
         )
+
+        sparsification_manager.check_for_invalid_state()
+
         return sparsification_manager
 
     else:

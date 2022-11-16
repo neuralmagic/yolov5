@@ -79,10 +79,11 @@ def attempt_load(weights, device=None, inplace=True, fuse=True):
     for w in weights if isinstance(weights, list) else [weights]:
         ckpt = torch.load(attempt_download(w) if not str(w).startswith("zoo:") 
                 else sparsezoo_download(w), map_location='cpu')  # load
-
+        sparsified = bool(ckpt.get("checkpoint_recipe"))
+        
         ckpt = (
             (ckpt.get('ema') or ckpt['model']).to(device).float() 
-            if not ckpt["checkpoint_recipe"]
+            if not sparsified
             else load_sparsified_model(ckpt, device=device or "cpu")
         ) # FP32 model
 
@@ -92,7 +93,7 @@ def attempt_load(weights, device=None, inplace=True, fuse=True):
         if hasattr(ckpt, 'names') and isinstance(ckpt.names, (list, tuple)):
             ckpt.names = dict(enumerate(ckpt.names))  # convert to dict
 
-        model.append(ckpt.fuse().eval() if fuse and hasattr(ckpt, 'fuse') else ckpt.eval())  # model in eval mode
+        model.append(ckpt.fuse().eval() if fuse and hasattr(ckpt, 'fuse') and not sparsified else ckpt.eval())  # model in eval mode
 
     # Module compatibility updates
     for m in model.modules():
