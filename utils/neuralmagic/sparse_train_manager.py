@@ -383,7 +383,6 @@ class SparsificationManager(object):
             f"{f' saved as {save_name},' if save_name else ''} {megabytes:.1f}MB"
         )
 
-
 def maybe_create_sparsification_manager(
     model: torch.nn.Module,
     ckpt: Dict[str, Any],
