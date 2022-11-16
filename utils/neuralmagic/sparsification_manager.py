@@ -9,6 +9,7 @@ from sparseml.pytorch.utils import SparsificationGroupLogger
 
 from utils.autobatch import check_train_batch_size
 from utils.loggers import Loggers
+from utils.loss import ComputeLoss
 from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.neuralmagic.utils import ToggleableModelEMA, load_ema, nm_log_console
 from utils.torch_utils import ModelEMA, de_parallel
@@ -98,6 +99,9 @@ class SparsificationManager(object):
         self.quantized_checkpoint = (
             self.checkpoint_manager and self.checkpoint_manager.quantization_modifiers
         )
+        self.distillation_active = (
+            self.train_manager and self.train_manager.distillation_modifiers
+        )
 
         self.first_pruning_epoch = (
             math.floor(
@@ -123,6 +127,18 @@ class SparsificationManager(object):
                 )
             )
             if self.has_qat_phase
+            else None
+        )
+        self.first_distillation_epoch = (
+            math.floor(
+                min(
+                    [
+                        mod.start_epoch
+                        for mod in self.train_manager.distillation_modifiers
+                    ]
+                )
+            )
+            if self.distillation_active
             else None
         )
 
@@ -172,6 +188,8 @@ class SparsificationManager(object):
         dataloader: torch.utils.data.DataLoader,
         start_epoch: int,
         epochs: int,
+        compute_loss: ComputeLoss,
+        distillation_teacher: Optional[torch.nn.Module],
         ema_kwargs: Dict[str, Any] = {},
         resume: bool = False,
     ) -> Tuple[
@@ -182,7 +200,13 @@ class SparsificationManager(object):
         """
         # Wrap model for sparse training modifiers from recipe
         if self.train_manager:
-            self.train_manager.initialize(module=self.model, epoch=start_epoch)
+            self.train_manager.initialize(
+                module=self.model,
+                epoch=start_epoch,
+                distillation_teacher=distillation_teacher,
+            )
+
+        self.steps_per_epoch = len(dataloader)
 
         # initialize SparseML loggers, including recipe modifier loggers
         self.initialize_loggers(loggers)
@@ -197,7 +221,10 @@ class SparsificationManager(object):
 
         # Wrap the scaler for sparse training modifiers from recipe
         scaler = self.train_manager.modify(
-            self.model, optimizer, steps_per_epoch=len(dataloader), wrap_optim=scaler
+            self.model,
+            optimizer,
+            steps_per_epoch=self.steps_per_epoch,
+            wrap_optim=scaler,
         )
 
         # If recipe contains lr modifiers, turn off native lr scheduler
@@ -217,6 +244,9 @@ class SparsificationManager(object):
 
         # construct a ToggleableModelEMA from ModelEMA, allowing for disabling for QAT
         ema = load_ema(ema.ema.state_dict(), self.model, **ema_kwargs)
+
+        self.optimizer = optimizer
+        self.compute_loss = compute_loss
 
         return scaler, scheduler, ema, epochs
 
@@ -357,6 +387,40 @@ class SparsificationManager(object):
             )
 
         return new_batch_size, new_accumulate
+
+    def compute_distillation_loss(
+        self, epoch: int, inputs: torch.Tensor, targets: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Compute distillation loss
+
+        :param epoch: current epoch
+        :param inputs: inputs to the student model
+        :param targets: input labels
+
+        :return: computed distillation loss and loss items
+        """
+        batch_size = inputs.size(0)
+
+        # Compute student-only loss
+        student_outputs = self.model(inputs)
+        loss, loss_items = self.compute_loss(student_outputs, targets)
+
+        # Compute full distillation loss
+        loss = loss / batch_size
+        loss = self.train_manager.loss_update(
+            loss=loss,
+            module=self.model,
+            optimizer=self.optimizer,
+            epoch=epoch,
+            steps_per_epoch=self.steps_per_epoch,
+            student_outputs=student_outputs,
+            student_inputs=inputs,
+            student_labels=targets,
+        )
+        loss = loss * batch_size
+
+        return loss, loss_items
 
     def update_state_dict_for_saving(
         self, ckpt: Dict[str, Any], final_epoch: bool, ema_enabled: bool
