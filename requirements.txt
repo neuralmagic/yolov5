@@ -38,7 +38,7 @@ seaborn>=0.11.0
 # tritonclient[all]~=2.24.0
 
 # Neural Magic
-sparseml[torchvision] >= 1.3
+sparseml[torchvision] >= 1.2
 
 # Extras --------------------------------------
 ipython  # interactive notebook
