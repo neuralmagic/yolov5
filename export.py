@@ -73,7 +73,7 @@ from models.yolo import ClassificationModel, Detect, DetectionModel, Segmentatio
 from utils.dataloaders import LoadImages
 from utils.general import (LOGGER, Profile, check_dataset, check_img_size, check_requirements, check_version,
                            check_yaml, colorstr, file_size, get_default_args, print_args, url2file, yaml_save)
-from utils.neuralmagic import apply_recipe_one_shot, get_sample_data, export_sample_inputs_outputs
+from utils.neuralmagic import apply_recipe_one_shot, export_sample_inputs_outputs
 from utils.torch_utils import select_device, smart_inference_mode
 
 MACOS = platform.system() == 'Darwin'  # macOS environment
@@ -151,26 +151,20 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
 
     if sparsified:
 
-        save_dir = f.parents[1] / "DeepSparse_Deployment" # Update export directory
+        # Update export directory
+        save_dir = (
+            f.parents[1] / "DeepSparse_Deployment" 
+            if f.parent == "weights"
+            else f.parent / "DeepSparse_Deployment" 
+        )
         save_dir.mkdir(exist_ok=True)
         f = save_dir / f.name 
 
+        # Apply the recipe in a one-shot manner
         if one_shot:
             sparsification_manager = apply_recipe_one_shot(model, one_shot)
 
-        if export_samples > 0:
-            if not data:
-                raise ValueError("export samples is greater than 0, but data arg is not set")
-
-            _, _, *image_size = list(im.shape)
-            export_sample_inputs_outputs(
-                dataset=data, 
-                model=model, 
-                save_dir=f.parent, 
-                number_export_samples=export_samples, 
-                image_size=image_size
-            )
-
+        # Use the SparseML custom onnx export flow for sparsified models
         exporter = ModuleExporter(model, f.parent.absolute())
         exporter.export_onnx(
             im,
@@ -181,6 +175,19 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
             dynamic_axes=dynamic or None
         )
 
+        # Export sample data as numpy arrays. Can be used in inference with the DeepSparse engine
+        if export_samples > 0:
+            if not data:
+                raise ValueError("export samples is greater than 0, but data arg is not set")
+
+            _, _, *image_size = list(im.shape)
+            export_sample_inputs_outputs(
+                dataset=data, 
+                model=model, 
+                save_dir=f.parent, 
+                number_export_samples=export_samples, 
+                image_size=image_size[0]
+            )
 
     else:
         torch.onnx.export(
