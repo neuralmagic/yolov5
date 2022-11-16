@@ -18,8 +18,6 @@ __all__ = ["SparsificationManager", "maybe_create_sparsification_manager"]
 
 RANK = int(os.getenv("RANK", -1))
 
-# TODO: quantize add
-
 
 class SparsificationManager(object):
     """
@@ -349,10 +347,9 @@ class SparsificationManager(object):
             "yaml": ckpt["model"].yaml,
             "ema": ckpt["ema"].state_dict() if ema_enabled else None,
             "updates": ckpt["updates"] if ema_enabled else None,
-            "checkpoint_recipe": str(checkpoint_recipe)
-            if checkpoint_recipe
-            else None,  # TODO: save checkpoint recipe for best? do it in strip_optimizer
+            "checkpoint_recipe": str(checkpoint_recipe) if checkpoint_recipe else None,
             "epoch": -1 if final_epoch else ckpt["epoch"],
+            "nc": ckpt["model"].nc,
         }
         ckpt.update(sparseml_dict_update)
 
