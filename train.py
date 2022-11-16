@@ -55,7 +55,7 @@ from utils.loggers import Loggers
 from utils.loggers.comet.comet_utils import check_comet_resume
 from utils.loss import ComputeLoss
 from utils.metrics import fitness
-from utils.neural_magic import sparsezoo_download, maybe_load_sparsified_model, SparsificationManager
+from utils.neuralmagic import sparsezoo_download, maybe_create_sparsification_manager, SparsificationManager, load_sparsified_model
 from utils.plots import plot_evolve
 from utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, select_device, smart_DDP, smart_optimizer,
                                smart_resume, torch_distributed_zero_first)
@@ -124,7 +124,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             ) 
         ckpt = torch.load(weights, map_location='cpu')  # load checkpoint to CPU to avoid CUDA memory leak
         model = Model(cfg or ckpt.get('yaml') or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
-        sparse_manager = maybe_load_sparsified_model(model, ckpt=ckpt, train_recipe=opt.sparsification_recipe, recipe_args=opt.recipe_args) # process sparse model, if detected 
+        sparsification_manager = maybe_create_sparsification_manager(model, ckpt=ckpt, train_recipe=opt.sparsification_recipe, recipe_args=opt.recipe_args) # process sparse model, if detected 
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict() if isinstance(ckpt['model'], nn.Module) else ckpt['model'] # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
@@ -132,7 +132,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
-        sparse_manager = (
+        sparsification_manager = (
             SparsificationManager(model, train_recipe=opt.sparsification_recipe, recipe_args=opt.recipe_args) 
             if opt.sparsification_recipe 
             else None
@@ -267,8 +267,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     scaler = torch.cuda.amp.GradScaler(enabled=amp)
     stopper, stop = EarlyStopping(patience=opt.patience), False
     compute_loss = ComputeLoss(model)  # init loss class
-    if sparse_manager: # update run configuration for training-aware sparsification
-        scaler, scheduler, ema, epochs = sparse_manager.initialize(
+    if sparsification_manager: # update run configuration for training-aware sparsification
+        scaler, scheduler, ema, epochs = sparsification_manager.initialize(
             loggers=loggers,
             scaler=scaler,
             optimizer=optimizer,
@@ -288,11 +288,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         callbacks.run('on_train_epoch_start')
 
         # Turn off features incompatible with QAT
-        if sparse_manager and sparse_manager.starting_qat(epoch):
-            sparse_manager.disable_ema_amp(ema, amp, scaler)
+        if sparsification_manager and sparsification_manager.starting_qat(epoch):
+            ema, amp, scaler = sparsification_manager.disable_ema_amp(ema, amp, scaler)
             # Rescale batch size for QAT
             if opt.batch_size == -1:
-                batch_size, accumulate = sparse_manager.rescale_gradient_accumulation(
+                batch_size, accumulate = sparsification_manager.rescale_gradient_accumulation(
                     batch_size=batch_size, 
                     accumulate=accumulate, 
                     image_size=imgsz
@@ -392,7 +392,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                                 batch_size=batch_size // WORLD_SIZE * 2,
                                                 imgsz=imgsz,
                                                 half=amp,
-                                                model=ema.ema,
+                                                model=ema.ema if not sparsification_manager else model,
                                                 single_cls=single_cls,
                                                 dataloader=val_loader,
                                                 save_dir=save_dir,
@@ -420,8 +420,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     'opt': vars(opt),
                     'date': datetime.now().isoformat()}
 
-                if sparse_manager:
-                    ckpt = sparse_manager.update_state_dict_for_saving(ckpt, final_epoch, ema.enabled)
+                if sparsification_manager:
+                    ckpt = sparsification_manager.update_state_dict_for_saving(ckpt, final_epoch, ema.enabled)
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
@@ -443,18 +443,21 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         # end epoch ----------------------------------------------------------------------------------------------------
     # end training -----------------------------------------------------------------------------------------------------
-    if RANK in {-1, 0} and not sparse_manager:
+    if RANK in {-1, 0}:
         LOGGER.info(f'\n{epoch - start_epoch + 1} epochs completed in {(time.time() - t0) / 3600:.3f} hours.')
         for f in last, best:
             if f.exists():
-                strip_optimizer(f)  # strip optimizers
+                strip_optimizer(f) if not sparsification_manager else sparsification_manager.strip_sparsified_optimizer(f)  # strip optimizers
                 if f is best:
                     LOGGER.info(f'\nValidating {f}...')
+                    model = attempt_load(f, device, fuse=not sparsification_manager)
+                    if amp:
+                        model.half()
                     results, _, _ = validate.run(
                         data_dict,
                         batch_size=batch_size // WORLD_SIZE * 2,
                         imgsz=imgsz,
-                        model=attempt_load(f, device).half(),
+                        model=model,
                         iou_thres=0.65 if is_coco else 0.60,  # best pycocotools at iou 0.65
                         single_cls=single_cls,
                         dataloader=val_loader,
@@ -463,7 +466,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                         verbose=True,
                         plots=plots,
                         callbacks=callbacks,
-                        compute_loss=compute_loss)  # val best model with plots
+                        compute_loss=compute_loss,
+                        half=amp)  # val best model with plots
                     if is_coco:
                         callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness, fi)
 

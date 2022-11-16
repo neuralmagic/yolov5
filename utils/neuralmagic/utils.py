@@ -1,12 +1,19 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import torch
+from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import download_framework_model_by_recipe_type
 from sparsezoo import Model
 
+from models.yolo import Model as Yolov5Model
 from utils.torch_utils import ModelEMA
 
-__all__ = ["sparsezoo_download", "ToggleableModelEMA", "load_ema"]
+__all__ = [
+    "sparsezoo_download",
+    "ToggleableModelEMA",
+    "load_ema",
+    "load_sparsified_model",
+]
 
 
 class ToggleableModelEMA(ModelEMA):
@@ -23,7 +30,7 @@ class ToggleableModelEMA(ModelEMA):
             super().update(*args, **kwargs)
 
 
-def sparsezoo_download(path: str, sparsification_recipe: Optional[str]) -> str:
+def sparsezoo_download(path: str, sparsification_recipe: Optional[str] = None) -> str:
     """
     Loads model from the SparseZoo and override the path with the new download path
     """
@@ -44,3 +51,28 @@ def load_ema(
     ema = ToggleableModelEMA(enabled, model, **ema_kwargs)
     ema.ema.load_state_dict(ema_state_dict)
     return ema
+
+
+def load_sparsified_model(
+    ckpt: Union[Dict[str, Any], str], device: Union[str, torch.device] = "cpu"
+) -> torch.nn.Module:
+    """
+    From a sparisifed checkpoint, loads a model with the saved weights and
+    sparsification recipe applied
+
+    :param ckpt: either a loaded checkpoint or the path to a saved checkpoint
+    :param device: device to load the model onto
+    """
+    # Load checkpoint if not yet loaded
+    ckpt = ckpt if isinstance(ckpt, dict) else torch.load(ckpt, map_location=device)
+
+    # Construct randomly initialized model model and apply sparse structure modifiers
+    model = Yolov5Model(ckpt.get("yaml")).to(device)
+    checkpoint_manager = ScheduledModifierManager.from_yaml(ckpt["checkpoint_recipe"])
+    checkpoint_manager.apply_structure(
+        model, ckpt["epoch"] if ckpt["epoch"] >= 0 else float("inf")
+    )
+
+    # Load state dict
+    model.load_state_dict(ckpt["ema"] or ckpt["model"], strict=True)
+    return model
