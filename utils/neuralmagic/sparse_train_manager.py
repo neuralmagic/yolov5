@@ -35,9 +35,9 @@ class SparsificationManager(object):
     def __init__(
         self,
         model: torch.nn.Module,
-        train_recipe: str,
+        train_recipe: Optional[str],
         recipe_args: Optional[Union[Dict[str, Any], str]],
-        checkpoint_recipe: str = None,
+        checkpoint_recipe: Optional[str] = None,
         last_epoch: int = 0,
     ):
         self.qat_started = False
@@ -64,7 +64,8 @@ class SparsificationManager(object):
 
         # Training manager for current training run
         self.train_manager = ScheduledModifierManager.from_yaml(
-            file_path=train_recipe, recipe_variables=recipe_args
+            file_path=train_recipe,
+            recipe_variables=recipe_args if train_recipe else None,
         )
 
         # Apply recipe structure from checkpoint recipe. Can include QAT and layer

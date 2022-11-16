@@ -449,7 +449,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 strip_optimizer(f) if not sparsification_manager else sparsification_manager.strip_sparsified_optimizer(f)  # strip optimizers
                 if f is best:
                     LOGGER.info(f'\nValidating {f}...')
-                    model = attempt_load(f, device, fuse=not sparsification_manager)
+                    model = attempt_load(f, device)
                     if amp:
                         model.half()
                     results, _, _ = validate.run(
