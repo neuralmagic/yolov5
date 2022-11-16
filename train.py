@@ -399,6 +399,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                                 callbacks=callbacks,
                                                 compute_loss=compute_loss)
 
+                if sparsification_manager:
+                    new_best_fitness, new_best_filename = sparsification_manager.maybe_switch_phases(epoch)
+                    best_fitness = new_best_fitness or best_fitness
+                    best = w / new_best_filename if new_best_filename else best
+
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
             stop = stopper(epoch=epoch, fitness=fi)  # early stop check
@@ -444,10 +449,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     # end training -----------------------------------------------------------------------------------------------------
     if RANK in {-1, 0}:
         LOGGER.info(f'\n{epoch - start_epoch + 1} epochs completed in {(time.time() - t0) / 3600:.3f} hours.')
-        for f in last, best:
+        best_models = [best] if not sparsification_manager else [ w / f"best_{phase}.pt" for phase in sparsification_manager.passed_phases]
+        final_models = [last] + best_models
+        for f in final_models:
             if f.exists():
                 strip_optimizer(f) if not sparsification_manager else sparsification_manager.strip_sparsified_optimizer(f)  # strip optimizers
-                if f is best:
+                if f is final_models[-1]:
                     LOGGER.info(f'\nValidating {f}...')
                     model = attempt_load(f, device)
                     if amp:
