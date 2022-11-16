@@ -334,7 +334,7 @@ class DetectMultiBackend(nn.Module):
         super().__init__()
         w = str(weights[0] if isinstance(weights, list) else weights)
         pt, jit, onnx, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle, triton = self._model_type(w)
-        sparsezoo = str(w.startswith("zoo:"))
+        sparsezoo = str(w).startswith("zoo:")
         pt = pt or sparsezoo
         fp16 &= (pt and not sparsezoo) or jit or onnx or engine  # FP16
         nhwc = coreml or saved_model or pb or tflite or edgetpu  # BHWC formats (vs torch BCWH)
