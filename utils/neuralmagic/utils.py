@@ -5,6 +5,7 @@ from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import download_framework_model_by_recipe_type
 from sparsezoo import Model
 
+from models.experimental import attempt_load
 from models.yolo import Model as Yolov5Model
 from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.torch_utils import ModelEMA

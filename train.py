@@ -55,7 +55,7 @@ from utils.loggers import Loggers
 from utils.loggers.comet.comet_utils import check_comet_resume
 from utils.loss import ComputeLoss
 from utils.metrics import fitness
-from utils.neuralmagic import sparsezoo_download, maybe_create_sparsification_manager, SparsificationManager, load_sparsified_model
+from utils.neuralmagic import sparsezoo_download, maybe_create_sparsification_manager, SparsificationManager
 from utils.plots import plot_evolve
 from utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, select_device, smart_DDP, smart_optimizer,
                                smart_resume, torch_distributed_zero_first)
@@ -138,6 +138,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             else None
         )
     amp = check_amp(model)  # check AMP
+    teacher_model = attempt_load(opt.teacher_weights) if opt.teacher_weights and sparsification_manager else None
 
     # Freeze
     freeze = [f'model.{x}.' for x in (freeze if len(freeze) > 1 else range(freeze[0]))]  # layers to freeze
@@ -243,6 +244,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     # DDP mode
     if cuda and RANK != -1:
         model = smart_DDP(model)
+        teacher_model = smart_DDP(teacher_model) if teacher_model else teacher_model
 
     # Model attributes
     nl = de_parallel(model).model[-1].nl  # number of detection layers (to scale hyps)
@@ -277,6 +279,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             dataloader=train_loader,
             start_epoch=start_epoch,
             epochs=epochs,
+            compute_loss=compute_loss,
+            distillation_teacher=teacher_model,
             resume=resume,
         )
     callbacks.run('on_train_start')
@@ -344,8 +348,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
             # Forward
             with torch.cuda.amp.autocast(amp):
-                pred = model(imgs)  # forward
-                loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
+                if sparsification_manager and teacher_model:
+                    loss, loss_items = sparsification_manager.compute_distillation_loss(epoch, imgs, targets.to(device))
+                else:
+                    pred = model(imgs)  # forward
+                    loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
+
                 if RANK != -1:
                     loss *= WORLD_SIZE  # gradient averaged between devices in DDP mode
                 if opt.quad:
@@ -487,6 +495,7 @@ def parse_opt(known=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
+    parser.add_argument('--teacher-weights', type=str, default='', help='distillation teacher initial weights path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300, help='total training epochs')
