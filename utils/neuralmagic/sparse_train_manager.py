@@ -92,15 +92,15 @@ class SparsificationManager(object):
         if self.checkpoint_manager and self.checkpoint_manager.pruning_modifiers:
             if not self.train_manager:
                 self.log_console(
-                    "Model in danger of de-sparsification. Pruned model was loaded, "
-                    "but no sparsification recipe detected. A recipe with a "
+                    "Pruned model was loaded, but no sparsification recipe detected - "
+                    "model may revert to dense state. A recipe with a "
                     "ConstantPruningModifier can be used to maintain model sparsity "
                     "while training"
                 )
             elif not self.train_manager.pruning_modifiers:
                 self.log_console(
-                    "Model in danger of de-sparsification. Pruned model was loaded, "
-                    "but no pruning modifiers detected in sparsification recipe. A "
+                    "Pruned model was loaded, but no pruning modifiers detected in "
+                    "sparsification recipe - model may revert to dense state. A "
                     "recipe with a ConstantPruningModifier can be used to maintain "
                     "model sparsity while training"
                 )

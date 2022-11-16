@@ -450,6 +450,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 if f is best:
                     LOGGER.info(f'\nValidating {f}...')
                     model = attempt_load(f, device)
+
                     if amp:
                         model.half()
                     results, _, _ = validate.run(
