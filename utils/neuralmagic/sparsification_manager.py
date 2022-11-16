@@ -11,7 +11,7 @@ from utils.autobatch import check_train_batch_size
 from utils.loggers import Loggers
 from utils.loss import ComputeLoss
 from utils.neuralmagic.quantization import update_model_bottlenecks
-from utils.neuralmagic.utils import ToggleableModelEMA, load_ema, nm_log_console
+from utils.neuralmagic.utils import ALMOST_ONE, ToggleableModelEMA, load_ema, nm_log_console
 from utils.torch_utils import ModelEMA, de_parallel
 
 __all__ = ["SparsificationManager", "maybe_create_sparsification_manager"]
@@ -77,7 +77,7 @@ class SparsificationManager(object):
         # thinning
         if self.checkpoint_manager:
             self.checkpoint_manager.apply_structure(
-                self.model, last_epoch if last_epoch >= 0 else float("inf")
+                self.model, last_epoch + ALMOST_ONE if last_epoch >= 0 else float("inf")
             )
 
         self.set_sparsification_info()
@@ -217,7 +217,9 @@ class SparsificationManager(object):
             # If resumed run, apply recipe structure up to last epoch run. Structure can
             # include QAT and layer thinning
             if resume:
-                self.train_manager.apply_structure(self.model, start_epoch - 1)
+                self.train_manager.apply_structure(
+                    self.model, start_epoch - 1 + ALMOST_ONE
+                )
 
             # Wrap the scaler for sparse training modifiers from recipe
             scaler = self.train_manager.modify(
