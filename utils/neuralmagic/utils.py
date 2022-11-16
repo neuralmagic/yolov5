@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, Optional, Union
 
 import torch
@@ -6,6 +7,7 @@ from sparseml.pytorch.utils import download_framework_model_by_recipe_type
 from sparsezoo import Model
 
 from models.yolo import Model as Yolov5Model
+from utils.general import LOGGER, colorstr
 from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.torch_utils import ModelEMA
 
@@ -15,6 +17,9 @@ __all__ = [
     "load_ema",
     "load_sparsified_model",
 ]
+
+
+RANK = int(os.getenv("RANK", -1))
 
 
 class ToggleableModelEMA(ModelEMA):
@@ -64,6 +69,8 @@ def load_sparsified_model(
     :param ckpt: either a loaded checkpoint or the path to a saved checkpoint
     :param device: device to load the model onto
     """
+    nm_log_console("Loading sparsified model")
+
     # Load checkpoint if not yet loaded
     ckpt = ckpt if isinstance(ckpt, dict) else torch.load(ckpt, map_location=device)
 
@@ -78,3 +85,23 @@ def load_sparsified_model(
     # Load state dict
     model.load_state_dict(ckpt["ema"] or ckpt["model"], strict=True)
     return model
+
+
+def nm_log_console(self, message: str, logger: "Logger" = None, level: str = "info"):
+    """
+    Log sparsification-related messages to the console
+
+    :param message: message to be logged
+    :param level: level to be logged at
+    """
+    # default to global logger if none provided
+    logger = logger or LOGGER
+
+    if RANK in [0, -1]:
+        if level == "warning":
+            logger.warning(
+                f"{colorstr('Neural Magic: ')}{colorstr('yellow', 'warning - ')}"
+                f"{message}"
+            )
+        else:  # default to info
+            logger.info(f"{colorstr('Neural Magic: ')}{message}")
