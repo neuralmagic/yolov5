@@ -138,7 +138,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             else None
         )
     amp = check_amp(model)  # check AMP
-    teacher_model = attempt_load(opt.teacher_weights) if opt.teacher_weights and sparsification_manager.train_manager else None
+    teacher_model = (
+        attempt_load(opt.teacher_weights) 
+        if (opt.teacher_weights and sparsification_manager and sparsification_manager.distillation_active) 
+        else None
+    )
 
     # Freeze
     freeze = [f'model.{x}.' for x in (freeze if len(freeze) > 1 else range(freeze[0]))]  # layers to freeze

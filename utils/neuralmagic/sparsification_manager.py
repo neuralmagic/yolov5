@@ -87,19 +87,19 @@ class SparsificationManager(object):
         """
         Set attributes relating to sparsification in run
         """
-        self.has_pruning_phase = (
+        self.has_pruning_phase = bool(
             self.train_manager and self.train_manager.pruning_modifiers
         )
-        self.has_qat_phase = (
+        self.has_qat_phase = bool(
             self.train_manager and self.train_manager.quantization_modifiers
         )
-        self.pruned_checkpoint = (
+        self.pruned_checkpoint = bool(
             self.checkpoint_manager and self.checkpoint_manager.pruning_modifiers
         )
-        self.quantized_checkpoint = (
+        self.quantized_checkpoint = bool(
             self.checkpoint_manager and self.checkpoint_manager.quantization_modifiers
         )
-        self.distillation_active = (
+        self.distillation_active = bool(
             self.train_manager and self.train_manager.distillation_modifiers
         )
 
