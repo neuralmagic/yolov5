@@ -97,6 +97,7 @@ def attempt_load(weights, device=None, inplace=True, fuse=True):
             ckpt.names = dict(enumerate(ckpt.names))  # convert to dict
         if sparsified:
             ckpt.nc = nc
+            ckpt.sparsified = True
 
         model.append(ckpt.fuse().eval() if fuse and hasattr(ckpt, 'fuse') and not sparsified else ckpt.eval())  # model in eval mode
 
