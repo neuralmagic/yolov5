@@ -73,6 +73,7 @@ from models.yolo import ClassificationModel, Detect, DetectionModel, Segmentatio
 from utils.dataloaders import LoadImages
 from utils.general import (LOGGER, Profile, check_dataset, check_img_size, check_requirements, check_version,
                            check_yaml, colorstr, file_size, get_default_args, print_args, url2file, yaml_save)
+from utils.neuralmagic import apply_recipe_one_shot, get_sample_data
 from utils.torch_utils import select_device, smart_inference_mode
 
 MACOS = platform.system() == 'Darwin'  # macOS environment
@@ -131,7 +132,7 @@ def export_torchscript(model, im, file, optimize, prefix=colorstr('TorchScript:'
 
 
 @try_export
-def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, prefix=colorstr('ONNX:')):
+def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, data=None, one_shot=None, prefix=colorstr('ONNX:')):
     # YOLOv5 ONNX export
     check_requirements('onnx')
     import onnx
@@ -149,6 +150,17 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, pre
             dynamic['output0'] = {0: 'batch', 1: 'anchors'}  # shape(1,25200,85)
 
     if sparsified:
+
+        save_dir = f.parent / "DeepSparse_Deployment" # Update export directory
+        save_dir.mkdir(exist_ok=True)
+        f = save_dir / f.name 
+
+        if one_shot:
+            sparsification_manager = apply_recipe_one_shot(model, one_shot)
+            if data:
+                samples = get_sample_data(im, data)
+                torch.save(samples, save_dir / "input_samples.npy")
+
         exporter = ModuleExporter(model, f.parent.absolute())
         exporter.export_onnx(
             im,
@@ -158,6 +170,7 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, pre
             output_names=output_names,
             dynamic_axes=dynamic or None
         )
+
 
     else:
         torch.onnx.export(
@@ -524,6 +537,7 @@ def run(
         topk_all=100,  # TF.js NMS: topk for all classes to keep
         iou_thres=0.45,  # TF.js NMS: IoU threshold
         conf_thres=0.25,  # TF.js NMS: confidence threshold
+        one_shot=None #sparsification recipe to apply on export
 ):
     t = time.time()
     include = [x.lower() for x in include]  # to lowercase
@@ -541,7 +555,7 @@ def run(
     model = attempt_load(weights, device=device, inplace=True, fuse=True)  # load FP32 model
 
     # Sparsified models must be exported with onnx
-    sparsified = getattr(model, "sparsified", False)
+    sparsified = getattr(model, "sparsified", False) or one_shot
     if sparsified:
         flags = [False] * len(fmts)
         flags[1] = True
@@ -581,7 +595,7 @@ def run(
     if engine:  # TensorRT required before ONNX
         f[1], _ = export_engine(model, im, file, half, dynamic, simplify, workspace, verbose)
     if onnx or xml:  # OpenVINO requires ONNX
-        f[2], _ = export_onnx(model, im, file, opset, dynamic, simplify, sparsified)
+        f[2], _ = export_onnx(model, im, file, opset, dynamic, simplify, sparsified, data, one_shot)
     if xml:  # OpenVINO
         f[3], _ = export_openvino(file, metadata, half)
     if coreml:  # CoreML
@@ -657,6 +671,12 @@ def parse_opt():
         nargs='+',
         default=['torchscript'],
         help='torchscript, onnx, openvino, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle')
+    parser.add_argument(
+        "--one-shot",
+        type=str,
+        default=None,
+        help="local path or SparseZoo stub to a recipe to be applied"
+                " in one-shot manner before exporting")
     opt = parser.parse_args()
     print_args(vars(opt))
     return opt

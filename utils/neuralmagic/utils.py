@@ -1,6 +1,8 @@
 import os
-from typing import Any, Dict, Optional, Union
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
 import torch
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import download_framework_model_by_recipe_type
@@ -8,6 +10,8 @@ from sparsezoo import Model
 
 from models.yolo import Model as Yolov5Model
 from utils.general import LOGGER, colorstr
+from utils.dataloaders import LoadImages
+from utils.general import check_dataset, check_yaml
 from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.torch_utils import ModelEMA
 
@@ -17,6 +21,7 @@ __all__ = [
     "ToggleableModelEMA",
     "load_ema",
     "load_sparsified_model",
+    "get_sample_data",
 ]
 
 
@@ -107,3 +112,26 @@ def nm_log_console(message: str, logger: "Logger" = None, level: str = "info"):
             )
         else:  # default to info
             logger.info(f"{colorstr('Neural Magic: ')}{message}")
+def get_sample_data(
+    image: torch.Tensor, data: Union[str, Path], number_samples: int = 20
+) -> List[np.ndarray]:
+    """
+    Extracts number_samples of samples from the given dataset, with each sample as a
+    numpy array
+
+    :param image: sample image to determine image size
+    :param data: path to dataset
+    :number_samples: number of samples to extract
+    """
+    _, _, *imgsz = list(image.shape)
+    dataset = LoadImages(
+        check_dataset(check_yaml(data))["train"], img_size=imgsz, auto=False
+    )
+
+    samples = []
+    for i, image in enumerate(dataset):
+        if i >= number_samples:
+            break
+        samples.append(image[1])
+
+    return samples
