@@ -14,7 +14,11 @@ from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.neuralmagic.utils import ALMOST_ONE, ToggleableModelEMA, load_ema, nm_log_console
 from utils.torch_utils import ModelEMA, de_parallel
 
-__all__ = ["SparsificationManager", "maybe_create_sparsification_manager"]
+__all__ = [
+    "SparsificationManager",
+    "maybe_create_sparsification_manager",
+    "apply_recipe_one_shot",
+]
 
 
 class SparsificationManager(object):
@@ -532,7 +536,7 @@ class SparsificationManager(object):
 def maybe_create_sparsification_manager(
     model: torch.nn.Module,
     ckpt: Dict[str, Any],
-    train_recipe: str,
+    train_recipe: Optional[str],
     recipe_args: Optional[Union[Dict[str, Any], str]],
     device: Union[str, torch.device],
 ) -> Optional[SparsificationManager]:
@@ -557,14 +561,35 @@ def maybe_create_sparsification_manager(
             ckpt["ema"] = load_ema(ckpt["ema"], model)
 
         sparsification_manager = SparsificationManager(
-            model,
-            train_recipe,
-            recipe_args,
-            ckpt.get("checkpoint_recipe"),
-            ckpt["epoch"],
+            model=model,
+            train_recipe=train_recipe,
+            recipe_args=recipe_args,
+            checkpoint_recipe=ckpt.get("checkpoint_recipe"),
+            last_epoch=ckpt["epoch"],
         )
 
         return sparsification_manager
 
     else:
         return None
+
+
+def apply_recipe_one_shot(model: torch.nn.Module, recipe: str) -> SparsificationManager:
+    """
+    Applies a recipe to a model in one-shot, applying any pruning and quantization
+    modifiers.
+
+    NOTE: the current implementation is zero-shot. One-shot application with data to
+        be added in the near future
+    """
+    model.train()
+    sparsification_manager = SparsificationManager(
+        model=model,
+        train_recipe=None,
+        recipe_args=None,
+        checkpoint_recipe=recipe,
+        last_epoch=-1,
+    )
+    model.eval()
+
+    return sparsification_manager
