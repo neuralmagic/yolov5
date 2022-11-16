@@ -530,12 +530,13 @@ class SparsificationManager(object):
         ckpt["checkpoint_recipe"] = str(self.get_final_checkpoint_recipe())
 
         torch.save(ckpt, save_name or checkpoint_path)
-        
+
         megabytes = os.path.getsize(save_name or checkpoint_path) / 1e6
         self.log_console(
             f"Optimizer stripped from {checkpoint_path},"
             f"{f' saved as {save_name},' if save_name else ''} {megabytes:.1f}MB"
         )
+
 
 def maybe_create_sparsification_manager(
     model: torch.nn.Module,
