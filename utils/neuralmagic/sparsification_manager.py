@@ -318,7 +318,7 @@ class SparsificationManager(object):
             else self.train_manager or self.checkpoint_manager
         )
 
-    def starting_qat(self, epoch: int) -> bool:
+    def starting_qat(self, epoch: float) -> bool:
         """
         Returns true if this is the first epoch QAT is turned on
         """
@@ -328,7 +328,7 @@ class SparsificationManager(object):
         else:
             return False
 
-    def qat_active(self, epoch: int) -> bool:
+    def qat_active(self, epoch: float) -> bool:
         """
         Returns true if QAT is turned on for the given epoch
 
@@ -379,17 +379,16 @@ class SparsificationManager(object):
         train_manager_copy = ScheduledModifierManager.from_yaml(str(self.train_manager))
         train_manager_copy.apply_structure(quant_model_copy, float("inf"))
 
+        # batch size to maintain
+        effective_batch_size = batch_size * accumulate
+
         # Calculate maximum batch size that will fit in memory
         new_batch_size = check_train_batch_size(quant_model_copy, image_size, False)
 
-        # Calculate batch size closest to maximum that can be accumulated to maintain
-        # the original effective batch size. Note that if the original batch size is odd
-        # then the effective batch size will be incremented by 1
-
         # Roughly calculate batch size by rounding. In many circumstances this can
         # result in an effective batch size that is 1-few off from the original
-        new_accumulate = round(batch_size / new_batch_size)
-        new_batch_size = round(batch_size / new_accumulate)
+        new_accumulate = max(round(effective_batch_size / new_batch_size), 1)
+        new_batch_size = max(round(effective_batch_size / new_accumulate), 1)
 
         self.log_console(
             f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
@@ -469,7 +468,9 @@ class SparsificationManager(object):
 
         return ckpt
 
-    def maybe_switch_phases(self, epoch: int) -> Tuple[Optional[float], Optional[str]]:
+    def maybe_switch_phases(
+        self, epoch: float
+    ) -> Tuple[Optional[float], Optional[str]]:
         """
         Check if a new phase has been entered. If it has, record the new phase and
         reset the tracked best fitness. Possible phases are dense, pruned,
