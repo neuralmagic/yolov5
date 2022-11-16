@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-import numpy as np
+import numpy
 import torch
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import download_framework_model_by_recipe_type
@@ -22,6 +22,7 @@ __all__ = [
     "load_ema",
     "load_sparsified_model",
     "get_sample_data",
+    "export_sample_inputs_outputs",
 ]
 
 
@@ -114,7 +115,7 @@ def nm_log_console(message: str, logger: "Logger" = None, level: str = "info"):
             logger.info(f"{colorstr('Neural Magic: ')}{message}")
 def get_sample_data(
     image: torch.Tensor, data: Union[str, Path], number_samples: int = 20
-) -> List[np.ndarray]:
+) -> List[numpy.ndarray]:
     """
     Extracts number_samples of samples from the given dataset, with each sample as a
     numpy array
@@ -135,3 +136,64 @@ def get_sample_data(
         samples.append(image[1])
 
     return samples
+
+
+def export_sample_inputs_outputs(
+    dataset: Union[str, Path],
+    model: torch.nn.Module,
+    save_dir: Path,
+    number_export_samples=100,
+    image_size: int = 640,
+    save_inputs_as_uint8: bool = False,
+):
+    """
+    Export sample model input and output for testing with the DeepSparse Engine
+    """
+
+    dataloader = LoadImages(
+        check_dataset(check_yaml(dataset))["train"], img_size=image_size, auto=False
+    )
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    exported_samples = 0
+
+    sample_in_dir = save_dir / "sample_inputs"
+    sample_out_dir = save_dir / "sample_outputs"
+
+    sample_in_dir.mkdir(exist_ok=True)
+    sample_out_dir.mkdir(exist_ok=True)
+
+    for _, image, _, _, _ in dataloader:
+        # uint8 to float32, 0-255 to 0.0-1.0
+        image = (torch.from_numpy(image).float() / 255).expand(1, *image.shape)
+        image = image.to(device, non_blocking=True)
+        model_out = model(image)
+
+        # Move to cpu for exporting
+        image = image.detach().to("cpu")  # TODO: need to assign?
+
+        if isinstance(model_out, tuple) and len(model_out) > 1:
+            # flatten into a single list
+            model_out = [model_out[0], *model_out[1]]
+
+        model_out = [elem.detach().to("cpu") for elem in model_out]
+        outs_gen = zip(*model_out)
+
+        for sample_in, sample_out in zip(image, outs_gen):
+            sample_out = list(sample_out)
+            file_idx = f"{exported_samples}".zfill(4)
+
+            sample_input_filename = sample_in_dir / f"inp-{file_idx}.npz"
+            if save_inputs_as_uint8:
+                sample_in = (255 * sample_in).to(dtype=torch.uint8)
+            numpy.savez(sample_input_filename, sample_in)
+
+            sample_output_filename = sample_out_dir / f"out-{file_idx}.npz"
+            numpy.savez(sample_output_filename, *sample_out)
+            exported_samples += 1
+
+            if exported_samples >= number_export_samples:
+                break
+
+        if exported_samples >= number_export_samples:
+            break

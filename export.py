@@ -73,7 +73,7 @@ from models.yolo import ClassificationModel, Detect, DetectionModel, Segmentatio
 from utils.dataloaders import LoadImages
 from utils.general import (LOGGER, Profile, check_dataset, check_img_size, check_requirements, check_version,
                            check_yaml, colorstr, file_size, get_default_args, print_args, url2file, yaml_save)
-from utils.neuralmagic import apply_recipe_one_shot, get_sample_data
+from utils.neuralmagic import apply_recipe_one_shot, get_sample_data, export_sample_inputs_outputs
 from utils.torch_utils import select_device, smart_inference_mode
 
 MACOS = platform.system() == 'Darwin'  # macOS environment
@@ -132,7 +132,7 @@ def export_torchscript(model, im, file, optimize, prefix=colorstr('TorchScript:'
 
 
 @try_export
-def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, data=None, one_shot=None, prefix=colorstr('ONNX:')):
+def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, data=None, export_samples=0, one_shot=None, prefix=colorstr('ONNX:')):
     # YOLOv5 ONNX export
     check_requirements('onnx')
     import onnx
@@ -157,9 +157,19 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
 
         if one_shot:
             sparsification_manager = apply_recipe_one_shot(model, one_shot)
-            if data:
-                samples = get_sample_data(im, data)
-                torch.save(samples, save_dir / "input_samples.npy")
+
+        if export_samples > 0:
+            if not data:
+                raise ValueError("export samples is greater than 0, but data arg is not set")
+
+            _, _, *image_size = list(im.shape)
+            export_sample_inputs_outputs(
+                dataset=data, 
+                model=model, 
+                save_dir=f.parent, 
+                number_export_samples=export_samples, 
+                image_size=image_size
+            )
 
         exporter = ModuleExporter(model, f.parent.absolute())
         exporter.export_onnx(
@@ -537,7 +547,8 @@ def run(
         topk_all=100,  # TF.js NMS: topk for all classes to keep
         iou_thres=0.45,  # TF.js NMS: IoU threshold
         conf_thres=0.25,  # TF.js NMS: confidence threshold
-        one_shot=None #sparsification recipe to apply on export
+        export_samples=0, # number of samples to export with onnx
+        one_shot=None # sparsification recipe to apply on export
 ):
     t = time.time()
     include = [x.lower() for x in include]  # to lowercase
@@ -595,7 +606,7 @@ def run(
     if engine:  # TensorRT required before ONNX
         f[1], _ = export_engine(model, im, file, half, dynamic, simplify, workspace, verbose)
     if onnx or xml:  # OpenVINO requires ONNX
-        f[2], _ = export_onnx(model, im, file, opset, dynamic, simplify, sparsified, data, one_shot)
+        f[2], _ = export_onnx(model, im, file, opset, dynamic, simplify, sparsified, data, export_samples, one_shot)
     if xml:  # OpenVINO
         f[3], _ = export_openvino(file, metadata, half)
     if coreml:  # CoreML
@@ -666,6 +677,7 @@ def parse_opt():
     parser.add_argument('--topk-all', type=int, default=100, help='TF.js NMS: topk for all classes to keep')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='TF.js NMS: IoU threshold')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='TF.js NMS: confidence threshold')
+    parser.add_argument('--export-samples', type=int, default=0, help='number of samples to export with onnx')
     parser.add_argument(
         '--include',
         nargs='+',
