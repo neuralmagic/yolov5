@@ -33,6 +33,7 @@ class SparsificationManager(object):
         loaded model, if any
     :param last_epoch: last training epoch run for loaded model, relative to checkpoint
         recipe
+    :param device: device to load model to
     """
 
     def __init__(
@@ -42,6 +43,7 @@ class SparsificationManager(object):
         recipe_args: Optional[Union[Dict[str, Any], str]],
         checkpoint_recipe: Optional[str] = None,
         last_epoch: int = 0,
+        device: Union[str, torch.device] = "cpu",
     ):
         self.loggers = None
         self.qat_started = False
@@ -60,6 +62,9 @@ class SparsificationManager(object):
             )
             else model
         )
+
+        # update bottleneck modules to have quantizable add nodes
+        model = update_model_bottlenecks(model).to(device)
 
         # Training manager created from checkpoint recipe, if any
         self.checkpoint_manager = (
@@ -553,20 +558,18 @@ def maybe_create_sparsification_manager(
     """
     if ckpt.get("checkpoint_recipe") or train_recipe:
 
-        # update bottleneck modules to have quantizable add nodes
-        model = update_model_bottlenecks(model).to(device)
-
-        # reconstruct ToggleableModelEMA from state dictionary
-        if ckpt["ema"]:
-            ckpt["ema"] = load_ema(ckpt["ema"], model)
-
         sparsification_manager = SparsificationManager(
             model=model,
             train_recipe=train_recipe,
             recipe_args=recipe_args,
             checkpoint_recipe=ckpt.get("checkpoint_recipe"),
             last_epoch=ckpt["epoch"],
+            device=device,
         )
+
+        # reconstruct ToggleableModelEMA from state dictionary
+        if ckpt["ema"]:
+            ckpt["ema"] = load_ema(ckpt["ema"], model)
 
         return sparsification_manager
 

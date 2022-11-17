@@ -133,7 +133,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
         sparsification_manager = (
-            SparsificationManager(model, train_recipe=opt.sparsification_recipe, recipe_args=opt.recipe_args) 
+            SparsificationManager(model, train_recipe=opt.sparsification_recipe, recipe_args=opt.recipe_args, device=device) 
             if opt.sparsification_recipe 
             else None
         )
