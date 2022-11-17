@@ -315,12 +315,13 @@ class Concat(nn.Module):
 
 class DetectMultiBackend(nn.Module):
     # YOLOv5 MultiBackend class for python inference on various backends
-    def __init__(self, weights='yolov5s.pt', device=torch.device('cpu'), dnn=False, data=None, fp16=False, fuse=True):
+    def __init__(self, weights='yolov5s.pt', device=torch.device('cpu'), dnn=False, deepsparse=False, data=None, fp16=False, fuse=True):
         # Usage:
         #   PyTorch:              weights = *.pt
         #   TorchScript:                    *.torchscript
         #   ONNX Runtime:                   *.onnx
         #   ONNX OpenCV DNN:                *.onnx --dnn
+        #   ONNX DeepSparse Engine:         *.onnx --deepsparse
         #   OpenVINO:                       *_openvino_model
         #   CoreML:                         *.mlmodel
         #   TensorRT:                       *.engine
@@ -363,6 +364,9 @@ class DetectMultiBackend(nn.Module):
             LOGGER.info(f'Loading {w} for ONNX OpenCV DNN inference...')
             check_requirements('opencv-python>=4.5.4')
             net = cv2.dnn.readNetFromONNX(w)
+        elif deepsparse:
+            from deepsparse import compile_model
+            ds_engine = compile_model(w)
         elif onnx:  # ONNX Runtime
             LOGGER.info(f'Loading {w} for ONNX Runtime inference...')
             check_requirements(('onnx', 'onnxruntime-gpu' if cuda else 'onnxruntime'))
@@ -521,6 +525,9 @@ class DetectMultiBackend(nn.Module):
             im = im.cpu().numpy()  # torch to numpy
             self.net.setInput(im)
             y = self.net.forward()
+        elif self.deepsparse:
+            im = im.cpu().numpy()
+            y = self.ds_engine([im])
         elif self.onnx:  # ONNX Runtime
             im = im.cpu().numpy()  # torch to numpy
             y = self.session.run(self.output_names, {self.session.get_inputs()[0].name: im})
