@@ -84,7 +84,7 @@ def run(
                 result = val_seg(data, w, batch_size, imgsz, plots=False, device=device, task='speed', half=half)
                 metric = result[0][7]  # (box(p, r, map50, map), mask(p, r, map50, map), *loss(box, obj, cls))
             else:  # DetectionModel:
-                result = val_det(data, w, batch_size, imgsz, plots=False, device=device, task='speed', half=half, deepsparse=(i==12))
+                result = val_det(data, w, batch_size, imgsz, plots=False, device=device, task='speed', half=half)
                 metric = result[0][3]  # (p, r, map50, map, *loss(box, obj, cls))
             speed = result[2][1]  # times (preprocess, inference, postprocess)
             y.append([name, round(file_size(w), 1), round(metric, 4), round(speed, 2)])  # MB, mAP, t_inference
