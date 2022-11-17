@@ -84,10 +84,16 @@ def run(
                 result = val_seg(data, w, batch_size, imgsz, plots=False, device=device, task='speed', half=half)
                 metric = result[0][7]  # (box(p, r, map50, map), mask(p, r, map50, map), *loss(box, obj, cls))
             else:  # DetectionModel:
-                result = val_det(data, w, batch_size, imgsz, plots=False, device=device, task='speed', half=half)
+                result = val_det(data, w, batch_size, imgsz, plots=False, device=device, task='speed', half=half, deepsparse=(i==12))
                 metric = result[0][3]  # (p, r, map50, map, *loss(box, obj, cls))
             speed = result[2][1]  # times (preprocess, inference, postprocess)
             y.append([name, round(file_size(w), 1), round(metric, 4), round(speed, 2)])  # MB, mAP, t_inference
+
+            # Benchmark onnx models on the DeepSparse engine
+            if i == 2:
+                result = val_det(data, w, batch_size, imgsz, plots=False, device=device, task='speed', half=half, deepsparse=True)
+                y.append(["DeepSparse", round(file_size(w), 1), round(result[0][3], 4), round(result[2][1], 2)]) 
+
         except Exception as e:
             if hard_fail:
                 assert type(e) is AssertionError, f'Benchmark --hard-fail for {name}: {e}'

@@ -574,10 +574,8 @@ def run(
 
     # Sparsified models must be exported with onnx
     sparsified = getattr(model, "sparsified", False) or one_shot
-    if sparsified:
-        flags = [False] * len(fmts)
-        flags[1] = True
-        jit, onnx, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle = flags
+    if sparsified and (flags[0] or any(flags[3:])):
+        raise ValueError("Sparsified model export supported only for ONNX and TensorRT")
 
     # Checks
     imgsz *= 2 if len(imgsz) == 1 else 1  # expand
