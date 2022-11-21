@@ -90,6 +90,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     # Loggers
     data_dict = None
+    loggers = None
     if RANK in {-1, 0}:
         loggers = Loggers(save_dir, weights, opt, hyp, LOGGER)  # loggers instance
 
@@ -358,7 +359,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
             # Forward
             with torch.cuda.amp.autocast(amp):
-                if sparsification_manager.distillation_active and teacher_model:
+                if sparsification_manager and sparsification_manager.distillation_active and teacher_model:
                     loss, loss_items = sparsification_manager.compute_distillation_loss(epoch, imgs, targets.to(device))
                 else:
                     pred = model(imgs)  # forward

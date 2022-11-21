@@ -89,7 +89,9 @@ def update_model_bottlenecks(model: torch.nn.Module) -> torch.nn.Module:
                 e=channels_out_hidden / param.cv1.conv.out_channels,
             )
 
-            updated_module.load_state_dict(param.state_dict())
+            # Non-strict dict loading because class is initialized with identity batch
+            # norm and yolov5 default checkpoints can exclude batch norm
+            updated_module.load_state_dict(param.state_dict(), strict=False)
             new_bottlenecks.append(updated_module)
 
         elif isinstance(param, GhostBottleneck):
@@ -106,7 +108,9 @@ def update_model_bottlenecks(model: torch.nn.Module) -> torch.nn.Module:
                 s=stride,
             )
 
-            updated_module.load_state_dict(param.state_dict())
+            # Non-strict dict loading because class is initialized with identity batch
+            # norm and yolov5 default checkpoints can exclude batch norm
+            updated_module.load_state_dict(param.state_dict(), strict=False)
             new_bottlenecks.append(updated_module)
 
     # Replace found bottleneck modules
