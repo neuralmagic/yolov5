@@ -189,11 +189,11 @@ class SparsificationManager(object):
 
     def initialize(
         self,
-        loggers: Loggers,
+        loggers: Optional[Loggers],
         scaler: torch.cuda.amp.GradScaler,
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler._LRScheduler,
-        ema: ModelEMA,
+        ema: Optional[ModelEMA],
         dataloader: torch.utils.data.DataLoader,
         start_epoch: int,
         epochs: int,
@@ -218,7 +218,9 @@ class SparsificationManager(object):
             self.steps_per_epoch = len(dataloader)
 
             # initialize SparseML loggers, including recipe modifier loggers
-            self.initialize_loggers(loggers)
+            if loggers:
+                self.initialize_loggers(loggers)
+
             self.log_console(
                 "Sparse training detected. Wrapping training process with SparseML"
             )
@@ -254,7 +256,8 @@ class SparsificationManager(object):
                 )
 
         # construct a ToggleableModelEMA from ModelEMA, allowing for disabling for QAT
-        ema = load_ema(ema.ema.state_dict(), self.model, **ema_kwargs)
+        if ema:
+            ema = load_ema(ema.ema.state_dict(), self.model, **ema_kwargs)
 
         self.optimizer = optimizer
         self.compute_loss = compute_loss
@@ -266,7 +269,7 @@ class SparsificationManager(object):
         Initialize SparseML console, wandb, and tensorboard loggers from YOLOv5 loggers
         """
         # Console logger
-        self.logger = loggers.logger
+        self.loggers = loggers.logger
 
         # For logging sparse training values (e.g. sparsity %, custom lr schedule, etc.)
         def _logging_lambda(tag, value, values, step, wall_time, level):
@@ -348,13 +351,16 @@ class SparsificationManager(object):
         nm_log_console(message=message, logger=self.loggers, level=level)
 
     def disable_ema_amp(
-        self, ema: ToggleableModelEMA, amp: bool, scaler: torch.cuda.amp.GradScaler
+        self,
+        ema: Optional[ToggleableModelEMA],
+        amp: bool,
+        scaler: torch.cuda.amp.GradScaler,
     ) -> Tuple[ToggleableModelEMA, bool, torch.cuda.amp.GradScaler]:
         """
         Disable EMA and AMP if active, as they're not compatible with QAT
         """
         self.log_console("Starting QAT phase")
-        if ema.enabled:
+        if ema and ema.enabled:
             self.log_console("Turning off EMA (not supported with QAT)")
             ema.enabled = False
         if amp:
