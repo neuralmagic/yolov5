@@ -445,7 +445,11 @@ class SparsificationManager(object):
         return loss, loss_items
 
     def update_state_dict_for_saving(
-        self, ckpt: Dict[str, Any], final_epoch: bool, ema_enabled: bool
+        self,
+        ckpt: Dict[str, Any],
+        final_epoch: bool,
+        ema_enabled: bool,
+        number_classes: int,
     ) -> Dict[str, Any]:
         """
         Update checkpoint dictionary to be compatible with sparse model saving
@@ -453,6 +457,7 @@ class SparsificationManager(object):
         :param ckpt: original checkpoint dictionary
         :param final_epoch: True if called after last training epoch
         :param ema_enabled: True if ema is turned on
+        :param number_classes: Number of classes model detects
         """
         # checkpoint recipe saved with final models, for state re-construction upon
         # loading for validation or additional stage of sparsification
@@ -467,7 +472,7 @@ class SparsificationManager(object):
             "updates": ckpt["updates"] if ema_enabled else None,
             "checkpoint_recipe": str(checkpoint_recipe) if checkpoint_recipe else None,
             "epoch": -1 if final_epoch else ckpt["epoch"],
-            "nc": ckpt["model"].nc,
+            "nc": number_classes,
         }
         ckpt.update(sparseml_dict_update)
 
