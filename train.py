@@ -306,14 +306,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
             if not sparsification_manager.quantized_checkpoint:
                 # Rescale batch size for QAT
-                '''
                 batch_size, accumulate = sparsification_manager.rescale_gradient_accumulation(
                     batch_size=batch_size, 
                     accumulate=accumulate, 
                     image_size=imgsz
                 )
                 train_loader, dataset, val_loader = _create_dataloaders()
-                '''
 
         model.train()
 
