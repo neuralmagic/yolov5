@@ -166,7 +166,6 @@ class SparsificationManager(object):
                     "model may revert to dense state. A recipe with a "
                     "ConstantPruningModifier can be used to maintain model sparsity "
                     "while training",
-                    logger=self.loggers,
                     level="warning",
                 )
             elif not self.has_pruning_phase:
@@ -175,7 +174,6 @@ class SparsificationManager(object):
                     "sparsification recipe - model may revert to dense state. A "
                     "recipe with a ConstantPruningModifier can be used to maintain "
                     "model sparsity while training",
-                    logger=self.loggers,
                     level="warning",
                 )
 
@@ -567,6 +565,9 @@ def maybe_create_sparsification_manager(
         in the recipe with (i.e. num_epochs, init_lr)
     :param device: device to load model to
     """
+    if "recipe" in ckpt:
+        ckpt = _make_legacy_checkpoint_compatible(ckpt)
+
     if ckpt.get("checkpoint_recipe") or train_recipe:
 
         sparsification_manager = SparsificationManager(
@@ -607,3 +608,11 @@ def apply_recipe_one_shot(model: torch.nn.Module, recipe: str) -> Sparsification
     model.eval()
 
     return sparsification_manager
+
+
+def _make_legacy_checkpoint_compatible(checkpoint: Dict[str, Any]):
+    """
+    Update a legacy sparsezoo checkpoint to work with the updated version of yolov5
+    """
+    checkpoint["checkpoint_recipe"] = checkpoint.pop("recipe")
+    return checkpoint
