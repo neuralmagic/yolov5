@@ -410,7 +410,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                                 batch_size=batch_size // WORLD_SIZE * 2,
                                                 imgsz=imgsz,
                                                 half=amp,
-                                                model=ema.ema if not sparsification_manager else model,
+                                                model=ema.ema if not sparsification_manager.qat_started else de_parallel(model),
                                                 single_cls=single_cls,
                                                 dataloader=val_loader,
                                                 save_dir=save_dir,
