@@ -34,6 +34,7 @@ class SparsificationManager(object):
     :param last_epoch: last training epoch run for loaded model, relative to checkpoint
         recipe
     :param device: device to load model to
+    :param resumed: True for runs continued with the --resume flag
     """
 
     def __init__(
@@ -44,6 +45,7 @@ class SparsificationManager(object):
         checkpoint_recipe: Optional[str] = None,
         last_epoch: int = 0,
         device: Union[str, torch.device] = "cpu",
+        resumed: bool = False,
     ):
         self.loggers = None
         self.qat_started = False
@@ -82,15 +84,16 @@ class SparsificationManager(object):
             else None
         )
 
-        # Apply recipe structure from checkpoint recipe. Can include QAT and layer
-        # thinning
+        # Apply recipe structure from checkpoint. Can include QAT and layer thinning
         if self.checkpoint_manager:
             self.checkpoint_manager.apply_structure(
                 self.model, last_epoch + ALMOST_ONE if last_epoch >= 0 else float("inf")
             )
 
+        # Process sparsification settings and verify that they are a valid combination
         self.set_sparsification_info()
-        self.check_for_invalid_state()
+        if not resumed:
+            self.check_for_invalid_state()
 
     def set_sparsification_info(self):
         """
@@ -180,9 +183,9 @@ class SparsificationManager(object):
         # Checking valid state for quantized models
         if self.quantized_checkpoint and self.has_qat_phase:
             raise ValueError(
-                "Quantization can not be applied more than once. Loaded quantized model"
-                "from checkpoint and detected quantization modifier in sparsification"
-                "recipe. This is unsupported behavior. Ending run."
+                "Quantization can not be applied more than once. Loaded quantized "
+                "model from checkpoint and detected quantization modifier in "
+                "sparsification recipe. This is unsupported behavior. Ending run."
             )
 
     def initialize(
@@ -198,7 +201,7 @@ class SparsificationManager(object):
         compute_loss: ComputeLoss,
         distillation_teacher: Optional[torch.nn.Module],
         ema_kwargs: Dict[str, Any] = {},
-        resume: bool = False,
+        resumed: bool = False,
     ) -> Tuple[
         torch.cuda.amp.GradScaler, torch.optim.lr_scheduler._LRScheduler, ModelEMA, int
     ]:
@@ -225,7 +228,7 @@ class SparsificationManager(object):
 
             # If resumed run, apply recipe structure up to last epoch run. Structure can
             # include QAT and layer thinning
-            if resume:
+            if resumed:
                 self.train_manager.apply_structure(
                     self.model, start_epoch - 1 + ALMOST_ONE
                 )
@@ -253,9 +256,18 @@ class SparsificationManager(object):
                     f"recipe: {epochs}"
                 )
 
-        # construct a ToggleableModelEMA from ModelEMA, allowing for disabling for QAT
+        # construct a ToggleableModelEMA from ModelEMA, allowing for on/off toggle
         if ema:
-            ema = load_ema(ema.ema.state_dict(), self.model, **ema_kwargs)
+            # If resuming a mid-QAT run, disable ema
+            resumed_quant_model = (
+                resumed and self.has_qat_phase and start_epoch > self.first_qat_epoch
+            )
+
+            ema = load_ema(
+                ema.ema.state_dict(),
+                self.model if not resumed_quant_model else ema.ema,
+                **ema_kwargs,
+            )
 
         self.optimizer = optimizer
         self.compute_loss = compute_loss
@@ -553,6 +565,7 @@ def maybe_create_sparsification_manager(
     train_recipe: Optional[str],
     recipe_args: Optional[Union[Dict[str, Any], str]],
     device: Union[str, torch.device],
+    resumed: bool = False,
 ) -> Optional[SparsificationManager]:
     """
     If sparse training or checkpoint detected, load sparse model and return
@@ -564,6 +577,7 @@ def maybe_create_sparsification_manager(
     :param recipe_args: additional arguments to override any root variables
         in the recipe with (i.e. num_epochs, init_lr)
     :param device: device to load model to
+    :param resumed: True for runs continued with the --resume flag
     """
     if "recipe" in ckpt:
         ckpt = _make_legacy_checkpoint_compatible(ckpt)
@@ -577,6 +591,7 @@ def maybe_create_sparsification_manager(
             checkpoint_recipe=ckpt.get("checkpoint_recipe"),
             last_epoch=ckpt["epoch"],
             device=device,
+            resumed=resumed,
         )
 
         # reconstruct ToggleableModelEMA from state dictionary
