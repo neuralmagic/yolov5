@@ -70,17 +70,17 @@ class TFConv(keras.layers.Layer):
 
         conv = keras.layers.Conv2D(
             c2, k, s, 'SAME' if s == 1 else 'VALID', use_bias=False if hasattr(w, 'bn') else True,
-            kernel_initializer=keras.initializers.Constant(w.conv.weight.permute(2, 3, 1, 0).numpy()),
+            kernel_initializer=keras.initializers.Constant((getattr(w.conv, "weight", None) or getattr(w.conv.module, "weight")).permute(2, 3, 1, 0).numpy()),
             bias_initializer='zeros' if hasattr(w, 'bn') else keras.initializers.Constant(w.conv.bias.numpy()))
         self.conv = conv if s == 1 else keras.Sequential([TFPad(autopad(k, p)), conv])
-        self.bn = TFBN(w.bn) if hasattr(w, 'bn') else tf.identity
+        self.bn = TFBN(w.bn) if (hasattr(w, 'bn') and not isinstance(w.bn, nn.Identity)) else tf.identity
 
         # YOLOv5 activations
-        if isinstance(w.act, nn.LeakyReLU):
+        if isinstance(w.act, nn.LeakyReLU) or (hasattr(w.act, "module") and isinstance(w.act.module, nn.LeakyReLU)):
             self.act = (lambda x: keras.activations.relu(x, alpha=0.1)) if act else tf.identity
-        elif isinstance(w.act, nn.Hardswish):
+        elif isinstance(w.act, nn.Hardswish) or (hasattr(w.act, "module") and isinstance(w.act.module, nn.Hardswish)):
             self.act = (lambda x: x * tf.nn.relu6(x + 3) * 0.166666667) if act else tf.identity
-        elif isinstance(w.act, (nn.SiLU, SiLU)):
+        elif isinstance(w.act, (nn.SiLU, SiLU)) or (hasattr(w.act, "module") and isinstance(w.act.module, (nn.SiLU, SiLU))):
             self.act = (lambda x: keras.activations.swish(x)) if act else tf.identity
         else:
             raise Exception(f'no matching TensorFlow activation found for {w.act}')
@@ -124,8 +124,8 @@ class TFConv2d(keras.layers.Layer):
         assert g == 1, "TF v2.2 Conv2D does not support 'groups' argument"
         self.conv = keras.layers.Conv2D(
             c2, k, s, 'VALID', use_bias=bias,
-            kernel_initializer=keras.initializers.Constant(w.weight.permute(2, 3, 1, 0).numpy()),
-            bias_initializer=keras.initializers.Constant(w.bias.numpy()) if bias else None, )
+            kernel_initializer=keras.initializers.Constant((getattr(w, "weight", None) or getattr(w.module, "weight")).permute(2, 3, 1, 0).numpy()),
+            bias_initializer=keras.initializers.Constant((getattr(w, "bias", None) or getattr(w.module, "bias")).numpy()) if bias else None, )
 
     def call(self, inputs):
         return self.conv(inputs)
