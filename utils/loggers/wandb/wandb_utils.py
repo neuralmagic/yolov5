@@ -40,7 +40,7 @@ def check_wandb_config_file(data_config_file):
     return data_config_file
 
 
-def check_wandb_dataset(data_file):
+def check_wandb_dataset(data_file, data_path):
     is_trainset_wandb_artifact = False
     is_valset_wandb_artifact = False
     if isinstance(data_file, dict):
@@ -56,7 +56,7 @@ def check_wandb_dataset(data_file):
     if is_trainset_wandb_artifact or is_valset_wandb_artifact:
         return data_dict
     else:
-        return check_dataset(data_file)
+        return check_dataset(data_file, data_path)
 
 
 def get_run_info(run_path):
@@ -187,9 +187,9 @@ class WandbLogger():
                     if isinstance(opt.resume, str) and opt.resume.startswith(WANDB_ARTIFACT_PREFIX):
                         self.data_dict = dict(self.wandb_run.config.data_dict)
                     else:  # local resume
-                        self.data_dict = check_wandb_dataset(opt.data)
+                        self.data_dict = check_wandb_dataset(opt.data, opt.data_path)
                 else:
-                    self.data_dict = check_wandb_dataset(opt.data)
+                    self.data_dict = check_wandb_dataset(opt.data, opt.data_path)
                     self.wandb_artifact_data_dict = self.wandb_artifact_data_dict or self.data_dict
 
                     # write data_dict to config. useful for resuming from artifacts. Do this only when not resuming.
@@ -211,7 +211,7 @@ class WandbLogger():
         Updated dataset info dictionary where local dataset paths are replaced by WAND_ARFACT_PREFIX links.
         """
         assert wandb, 'Install wandb to upload dataset'
-        config_path = self.log_dataset_artifact(opt.data, opt.single_cls,
+        config_path = self.log_dataset_artifact(opt.data, opt.data_path, opt.single_cls,
                                                 'YOLOv5' if opt.project == 'runs/train' else Path(opt.project).stem)
         with open(config_path, errors='ignore') as f:
             wandb_data_dict = yaml.safe_load(f)
@@ -332,7 +332,7 @@ class WandbLogger():
                            aliases=['latest', 'last', 'epoch ' + str(self.current_epoch), 'best' if best_model else ''])
         LOGGER.info(f"Saving model artifact on epoch {epoch + 1}")
 
-    def log_dataset_artifact(self, data_file, single_cls, project, overwrite_config=False):
+    def log_dataset_artifact(self, data_file, data_path, single_cls, project, overwrite_config=False):
         """
         Log the dataset as W&B artifact and return the new data file with W&B links
 
@@ -348,7 +348,7 @@ class WandbLogger():
         """
         upload_dataset = self.wandb_run.config.upload_dataset
         log_val_only = isinstance(upload_dataset, str) and upload_dataset == 'val'
-        self.data_dict = check_dataset(data_file)  # parse and check
+        self.data_dict = check_dataset(data_file, data_path)  # parse and check
         data = dict(self.data_dict)
         nc, names = (1, ['item']) if single_cls else (int(data['nc']), data['names'])
         names = {k: v for k, v in enumerate(names)}  # to index dictionary

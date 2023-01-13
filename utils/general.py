@@ -466,7 +466,7 @@ def check_font(font=FONT, progress=False):
         torch.hub.download_url_to_file(url, str(file), progress=progress)
 
 
-def check_dataset(data, autodownload=True):
+def check_dataset(data, data_path = '', autodownload=True):
     # Download, check and/or unzip dataset if not found locally
 
     # Download (optional)
@@ -479,6 +479,8 @@ def check_dataset(data, autodownload=True):
     # Read yaml (optional)
     if isinstance(data, (str, Path)):
         data = yaml_load(data)  # dictionary
+        if data_path and 'path' in data:
+                data['path'] = data_path
 
     # Checks
     for k in 'train', 'val', 'names':
