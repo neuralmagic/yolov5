@@ -72,6 +72,58 @@ from utils.metrics import ConfusionMatrix, ap_per_class
 from utils.plots import plot_val_study
 from utils.torch_utils import select_device, time_sync
 
+from typing import List
+
+import numpy
+
+import torch
+from deepsparse.yolo import YOLOOutput, YOLOPipeline
+from ultralytics.yolo.utils import ops
+
+
+@Pipeline.register("yolov8")
+class YOLOv8Pipeline(YOLOPipeline):
+    def process_engine_outputs(
+        self, engine_outputs: List[numpy.ndarray], **kwargs
+    ) -> YOLOOutput:
+        # post-processing
+        if self.postprocessor:
+            batch_output = self.postprocessor.pre_nms_postprocess(engine_outputs)
+        else:
+            batch_output = engine_outputs[
+                0
+            ]  # post-processed values stored in first output
+
+        # NMS
+        batch_output = ops.non_max_suppression(
+            torch.from_numpy(batch_output),
+            conf_thres=kwargs.get("conf_thres", 0.25),
+            iou_thres=kwargs.get("iou_thres", 0.6),
+            multi_label=kwargs.get("multi_label", False),
+        )
+
+        batch_boxes, batch_scores, batch_labels = [], [], []
+
+        for image_output in batch_output:
+            batch_boxes.append(image_output[:, 0:4].tolist())
+            batch_scores.append(image_output[:, 4].tolist())
+            batch_labels.append(image_output[:, 5].tolist())
+            if self.class_names is not None:
+                batch_labels_as_strings = [
+                    str(int(label)) for label in batch_labels[-1]
+                ]
+                batch_class_names = [
+                    self.class_names[label_string]
+                    for label_string in batch_labels_as_strings
+                ]
+                batch_labels[-1] = batch_class_names
+
+        return YOLOOutput(
+            boxes=batch_boxes,
+            scores=batch_scores,
+            labels=batch_labels,
+        )
+
 
 DEEPSPARSE = "deepsparse"
 ONNX_RUNTIME = "onnxruntime"
@@ -227,7 +279,7 @@ def run(
 
     # Load pipeline
     yolo_pipeline = Pipeline.create(
-        task="yolo",
+        task="yolov8",
         model_path=model_path,
         class_names="coco",
         engine_type=engine,
@@ -310,9 +362,9 @@ def run(
 
         # Inference
         out = yolo_pipeline(
-            images=[im.numpy()], 
-            iou_thres=iou_thres, 
-            conf_thres=conf_thres, 
+            images=[im.numpy()],
+            iou_thres=iou_thres,
+            conf_thres=conf_thres,
             multi_label=True
         )
 
@@ -480,9 +532,9 @@ def parse_opt():
         "--data", type=str, default=ROOT / "data/coco128.yaml", help="dataset.yaml path"
     )
     parser.add_argument(
-        '--data-path', 
-        type=str, 
-        default= '', 
+        '--data-path',
+        type=str,
+        default= '',
         help='path to dataset to overwrite the path in dataset.yaml'
     )
     default_yolo_stub = (
