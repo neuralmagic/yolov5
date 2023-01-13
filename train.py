@@ -287,7 +287,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             scheduler=scheduler,
             ema=ema,
             start_epoch=start_epoch,
-            steps_per_epoch=round(len(train_loader)/accumulate),
+            steps_per_epoch=math.ceil(len(train_loader)/accumulate),
             epochs=epochs,
             compute_loss=compute_loss,
             distillation_teacher=teacher_model,
