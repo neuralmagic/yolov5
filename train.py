@@ -139,11 +139,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             else None
         )
     amp = check_amp(model)  # check AMP
-    teacher_model = (
-        attempt_load(opt.teacher_weights) 
-        if (opt.teacher_weights and sparsification_manager and sparsification_manager.distillation_active) 
-        else None
-    )
+    with torch_distributed_zero_first(LOCAL_RANK):
+        teacher_model = (
+            attempt_load(opt.teacher_weights, device=device) 
+            if (opt.teacher_weights and sparsification_manager and sparsification_manager.distillation_active) 
+            else None
+        )
 
     # Freeze
     freeze = [f'model.{x}.' for x in (freeze if len(freeze) > 1 else range(freeze[0]))]  # layers to freeze
@@ -285,8 +286,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             optimizer=optimizer,
             scheduler=scheduler,
             ema=ema,
-            dataloader=train_loader,
             start_epoch=start_epoch,
+            steps_per_epoch=round(len(train_loader)/accumulate),
             epochs=epochs,
             compute_loss=compute_loss,
             distillation_teacher=teacher_model,
@@ -359,7 +360,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
             # Forward
             with torch.cuda.amp.autocast(amp):
-                if sparsification_manager and sparsification_manager.distillation_active and teacher_model:
+                if sparsification_manager and sparsification_manager.distillation_active(epoch) and teacher_model:
                     loss, loss_items = sparsification_manager.compute_distillation_loss(epoch, imgs, targets.to(device))
                 else:
                     pred = model(imgs)  # forward
