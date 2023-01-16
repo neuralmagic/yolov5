@@ -48,6 +48,7 @@ class SparsificationManager(object):
         resumed: bool = False,
     ):
         self.loggers = None
+        self.compute_loss = None
         self.qat_started = False
         self.current_phase = None
         self.passed_phases = []
@@ -111,7 +112,7 @@ class SparsificationManager(object):
         self.quantized_checkpoint = bool(
             self.checkpoint_manager and self.checkpoint_manager.quantization_modifiers
         )
-        self.distillation_active = bool(
+        self.has_distillation_phase = bool(
             self.train_manager and self.train_manager.distillation_modifiers
         )
 
@@ -150,7 +151,7 @@ class SparsificationManager(object):
                     ]
                 )
             )
-            if self.distillation_active
+            if self.has_distillation_phase
             else None
         )
 
@@ -195,8 +196,8 @@ class SparsificationManager(object):
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler._LRScheduler,
         ema: Optional[ModelEMA],
-        dataloader: torch.utils.data.DataLoader,
         start_epoch: int,
+        steps_per_epoch: int,
         epochs: int,
         compute_loss: ComputeLoss,
         distillation_teacher: Optional[torch.nn.Module],
@@ -215,8 +216,7 @@ class SparsificationManager(object):
                 epoch=start_epoch,
                 distillation_teacher=distillation_teacher,
             )
-
-            self.steps_per_epoch = len(dataloader)
+            self.steps_per_epoch = steps_per_epoch
 
             # initialize SparseML loggers, including recipe modifier loggers
             if loggers:
@@ -344,10 +344,18 @@ class SparsificationManager(object):
         :param epoch: epoch to check QAT status for
         """
         if self.has_qat_phase:
-            qat_start = min(
-                [mod.start_epoch for mod in self.train_manager.quantization_modifiers]
-            )
-            return qat_start < epoch + 1
+            return self.first_qat_epoch < epoch + 1
+        else:
+            return False
+
+    def distillation_active(self, epoch: float) -> bool:
+        """
+        Returns true if distillation is turned on for the given epoch
+
+        :param epoch: epoch to check distillation status for
+        """
+        if self.has_distillation_phase:
+            return self.first_distillation_epoch < epoch + 1
         else:
             return False
 

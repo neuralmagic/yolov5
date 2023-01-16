@@ -94,7 +94,7 @@ class CometLogger:
         self.default_experiment_kwargs.update(experiment_kwargs)
         self.experiment = self._get_experiment(self.comet_mode, run_id)
 
-        self.data_dict = self.check_dataset(self.opt.data)
+        self.data_dict = self.check_dataset(self.opt.data, self.opt.data_path)
         self.class_names = self.data_dict["names"]
         self.num_classes = self.data_dict["nc"]
 
@@ -227,7 +227,7 @@ class CometLogger:
                 overwrite=True,
             )
 
-    def check_dataset(self, data_file):
+    def check_dataset(self, data_file, data_path):
         with open(data_file) as f:
             data_config = yaml.safe_load(f)
 
@@ -239,7 +239,7 @@ class CometLogger:
 
         self.log_asset(self.opt.data, metadata={"type": "data-config-file"})
 
-        return check_dataset(data_file)
+        return check_dataset(data_file, data_path)
 
     def log_predictions(self, image, labelsn, path, shape, predn):
         if self.logged_images_count >= self.max_images:

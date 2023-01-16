@@ -115,6 +115,7 @@ def nm_log_console(message: str, logger: "Logger" = None, level: str = "info"):
 
 def export_sample_inputs_outputs(
     dataset: Union[str, Path],
+    data_path: str,
     model: torch.nn.Module,
     save_dir: Path,
     number_export_samples=100,
@@ -133,7 +134,7 @@ def export_sample_inputs_outputs(
     """
 
     # Create dataloader
-    data_dict = check_dataset(dataset)
+    data_dict = check_dataset(dataset, data_path)
     dataloader, _ = create_dataloader(
         path=data_dict["train"],
         imgsz=image_size,

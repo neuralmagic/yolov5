@@ -66,8 +66,8 @@ WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 
 
 def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictionary
-    save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze = \
-        Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
+    save_dir, epochs, batch_size, weights, single_cls, evolve, data, data_path, cfg, resume, noval, nosave, workers, freeze = \
+        Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.data_path, opt.cfg, \
         opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
     callbacks.run('on_pretrain_routine_start')
 
@@ -108,7 +108,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     cuda = device.type != 'cpu'
     init_seeds(opt.seed + 1 + RANK, deterministic=True)
     with torch_distributed_zero_first(LOCAL_RANK):
-        data_dict = data_dict or check_dataset(data)  # check if None
+        data_dict = data_dict or check_dataset(data, data_path)  # check if None
     train_path, val_path = data_dict['train'], data_dict['val']
     nc = 1 if single_cls else int(data_dict['nc'])  # number of classes
     names = {0: 'item'} if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
@@ -139,11 +139,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             else None
         )
     amp = check_amp(model)  # check AMP
-    teacher_model = (
-        attempt_load(opt.teacher_weights) 
-        if (opt.teacher_weights and sparsification_manager and sparsification_manager.distillation_active) 
-        else None
-    )
+    with torch_distributed_zero_first(LOCAL_RANK):
+        teacher_model = (
+            attempt_load(opt.teacher_weights, device=device) 
+            if (opt.teacher_weights and sparsification_manager and sparsification_manager.distillation_active) 
+            else None
+        )
 
     # Freeze
     freeze = [f'model.{x}.' for x in (freeze if len(freeze) > 1 else range(freeze[0]))]  # layers to freeze
@@ -285,8 +286,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             optimizer=optimizer,
             scheduler=scheduler,
             ema=ema,
-            dataloader=train_loader,
             start_epoch=start_epoch,
+            steps_per_epoch=math.ceil(len(train_loader)/accumulate),
             epochs=epochs,
             compute_loss=compute_loss,
             distillation_teacher=teacher_model,
@@ -359,7 +360,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
             # Forward
             with torch.cuda.amp.autocast(amp):
-                if sparsification_manager and sparsification_manager.distillation_active and teacher_model:
+                if sparsification_manager and sparsification_manager.distillation_active(epoch) and teacher_model:
                     loss, loss_items = sparsification_manager.compute_distillation_loss(epoch, imgs, targets.to(device))
                 else:
                     pred = model(imgs)  # forward
@@ -508,6 +509,7 @@ def parse_opt(known=False):
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--teacher-weights', type=str, default='', help='distillation teacher initial weights path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
+    parser.add_argument('--data-path', type=str, default= '', help='path to dataset to overwrite the path in dataset.yaml')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300, help='total training epochs')
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
