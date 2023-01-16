@@ -511,7 +511,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     return results
 
 
-def parse_opt(known=False):
+def parse_opt(known=False, skip_parse=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default=SAVE_ROOT / 'yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
@@ -562,7 +562,13 @@ def parse_opt(known=False):
     parser.add_argument('--bbox_interval', type=int, default=-1, help='Set bounding-box image logging interval')
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
 
-    return parser.parse_known_args()[0] if known else parser.parse_args()
+    if skip_parse:
+        opt = parser.parse_args([])
+    elif known:
+        opt = parser.parse_known_args()[0] 
+    else: 
+        opt = parser.parse_args()
+    return opt
 
 
 def main(opt, callbacks=Callbacks()):

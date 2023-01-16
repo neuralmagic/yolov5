@@ -339,7 +339,7 @@ def run(
     return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
-def parse_opt():
+def parse_opt(skip_parse=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
     parser.add_argument('--data-path', type=str, default= '', help='path to dataset to overwrite the path in dataset.yaml')
@@ -370,6 +370,11 @@ def parse_opt():
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.save_txt |= opt.save_hybrid
     print_args(vars(opt))
+    
+    if skip_parse:
+        opt = parser.parse_args([])
+    else: 
+        opt = parser.parse_args()
     return opt
 
 
@@ -406,7 +411,7 @@ def main(opt):
             plot_val_study(x=x)  # plot
 
 def val_run(**kwargs):
-    opt = parse_opt(True)
+    parse_opt() if not kwargs else parse_opt(skip_parse=True)
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
