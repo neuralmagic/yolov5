@@ -132,7 +132,7 @@ def export_torchscript(model, im, file, optimize, prefix=colorstr('TorchScript:'
 
 
 @try_export
-def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, data=None, export_samples=0, one_shot=None, prefix=colorstr('ONNX:')):
+def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, data=None, data_path='', export_samples=0, one_shot=None, prefix=colorstr('ONNX:')):
     # YOLOv5 ONNX export
     check_requirements('onnx')
     import onnx
@@ -182,7 +182,8 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
 
             _, _, *image_size = list(im.shape)
             export_sample_inputs_outputs(
-                dataset=data, 
+                dataset=data,
+                data_path=data_path, 
                 model=model, 
                 save_dir=f.parent, 
                 number_export_samples=export_samples, 
@@ -413,7 +414,7 @@ def export_pb(keras_model, file, prefix=colorstr('TensorFlow GraphDef:')):
 
 
 @try_export
-def export_tflite(keras_model, im, file, int8, data, nms, agnostic_nms, prefix=colorstr('TensorFlow Lite:')):
+def export_tflite(keras_model, im, file, int8, data, nms, agnostic_nms, data_path='', prefix=colorstr('TensorFlow Lite:')):
     # YOLOv5 TensorFlow Lite export
     import tensorflow as tf
 
@@ -427,7 +428,7 @@ def export_tflite(keras_model, im, file, int8, data, nms, agnostic_nms, prefix=c
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     if int8:
         from models.tf import representative_dataset_gen
-        dataset = LoadImages(check_dataset(check_yaml(data))['train'], img_size=imgsz, auto=False)
+        dataset = LoadImages(check_dataset(check_yaml(data, data_path))['train'], img_size=imgsz, auto=False)
         converter.representative_dataset = lambda: representative_dataset_gen(dataset, ncalib=100)
         converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
         converter.target_spec.supported_types = []
@@ -533,6 +534,7 @@ def add_tflite_metadata(file, metadata, num_outputs):
 @smart_inference_mode()
 def run(
         data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
+        data_path = '',
         weights=ROOT / 'yolov5s.pt',  # weights path
         imgsz=(640, 640),  # image (height, width)
         batch_size=1,  # batch size
@@ -613,7 +615,7 @@ def run(
     if engine:  # TensorRT required before ONNX
         f[1], _ = export_engine(model, im, file, half, dynamic, simplify, workspace, verbose)
     if onnx or xml:  # OpenVINO requires ONNX
-        f[2], _ = export_onnx(model, im, file, opset, dynamic, simplify, sparsified, data, export_samples, one_shot)
+        f[2], _ = export_onnx(model, im, file, opset, dynamic, simplify, sparsified, data, data_path, export_samples, one_shot)
     if xml:  # OpenVINO
         f[3], _ = export_openvino(file, metadata, half)
     if coreml:  # CoreML
@@ -635,7 +637,7 @@ def run(
         if pb or tfjs:  # pb prerequisite to tfjs
             f[6], _ = export_pb(s_model, file)
         if tflite or edgetpu:
-            f[7], _ = export_tflite(s_model, im, file, int8 or edgetpu, data=data, nms=nms, agnostic_nms=agnostic_nms)
+            f[7], _ = export_tflite(s_model, im, file, int8 or edgetpu, data=data, nms=nms, agnostic_nms=agnostic_nms, data_path=data_path)
             if edgetpu:
                 f[8], _ = export_edgetpu(file)
             add_tflite_metadata(f[8] or f[7], metadata, num_outputs=len(s_model.outputs))
@@ -664,6 +666,7 @@ def run(
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
+    parser.add_argument('--data-path', type=str, default= '', help='path to dataset to overwrite the path in dataset.yaml')
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model.pt path(s)')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640, 640], help='image (h, w)')
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')

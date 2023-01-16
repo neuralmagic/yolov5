@@ -1032,7 +1032,7 @@ class HUBDatasetStats():
         stats.process_images()
     """
 
-    def __init__(self, path='coco128.yaml', autodownload=False):
+    def __init__(self, path='coco128.yaml', data_path = '', autodownload=False):
         # Initialize class
         zipped, data_dir, yaml_path = self._unzip(Path(path))
         try:
@@ -1043,7 +1043,7 @@ class HUBDatasetStats():
         except Exception as e:
             raise Exception("error/HUB/dataset_stats/yaml_load") from e
 
-        check_dataset(data, autodownload)  # download dataset if missing
+        check_dataset(data, data_path, autodownload)  # download dataset if missing
         self.hub_dir = Path(data['path'] + '-hub')
         self.im_dir = self.hub_dir / 'images'
         self.im_dir.mkdir(parents=True, exist_ok=True)  # makes /images
