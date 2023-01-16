@@ -41,6 +41,7 @@ from utils.downloads import gsutil_getsize
 from utils.metrics import box_iou, fitness
 
 FILE = Path(__file__).resolve()
+SAVE_ROOT = Path.cwd()
 ROOT = FILE.parents[1]  # YOLOv5 root directory
 RANK = int(os.getenv('RANK', -1))
 
@@ -492,7 +493,7 @@ def check_dataset(data, data_path = '', autodownload=True):
     # Resolve paths
     path = Path(extract_dir or data.get('path') or '')  # optional 'path' default to '.'
     if not path.is_absolute():
-        path = (ROOT / path).resolve()
+        path = (SAVE_ROOT / path).resolve()
         data['path'] = path  # download scripts
     for k in 'train', 'val', 'test':
         if data.get(k):  # prepend path
