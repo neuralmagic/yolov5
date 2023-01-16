@@ -152,13 +152,19 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
     if sparsified:
 
         # Update export directory
-        save_dir = (
-            f.parents[1] / "DeepSparse_Deployment" 
-            if f.parent == "weights"
-            else f.parent / "DeepSparse_Deployment" 
-        )
+        if str(f).startswith("zoo:") or one_shot and str(one_shot).startswith("zoo:"):
+            stub_str = f"{one_shot}_one_shot" if one_shot else str(f)
+            save_dir = Path("DeepSparse_Deployment") / str(stub_str).split("zoo:")[1].replace("/", "_")
+            f = save_dir / "model.onnx"
+        else:
+            save_dir = (
+                f.parents[1] / "DeepSparse_Deployment" 
+                if f.parent == "weights"
+                else f.parent / "DeepSparse_Deployment" 
+            )
+            f = save_dir / f.name 
+            
         save_dir.mkdir(exist_ok=True)
-        f = save_dir / f.name 
 
         # Apply the recipe in a one-shot manner
         if one_shot:
@@ -614,7 +620,7 @@ def run(
         f[0], _ = export_torchscript(model, im, file, optimize)
     if engine:  # TensorRT required before ONNX
         f[1], _ = export_engine(model, im, file, half, dynamic, simplify, workspace, verbose)
-    if onnx or xml:  # OpenVINO requires ONNX
+    if onnx or xml:  # OpenVINO and DeepSparse require ONNX
         f[2], _ = export_onnx(model, im, file, opset, dynamic, simplify, sparsified, data, data_path, export_samples, one_shot)
     if xml:  # OpenVINO
         f[3], _ = export_openvino(file, metadata, half)
