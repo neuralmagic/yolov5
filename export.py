@@ -697,6 +697,12 @@ def main(opt):
     for opt.weights in (opt.weights if isinstance(opt.weights, list) else [opt.weights]):
         run(**vars(opt))
 
+def export_run(**kwargs):
+    opt = parse_opt(known = True) if not kwargs else parse_opt(skip_parse = True)
+    for k, v in kwargs.items():
+        setattr(opt, k, v)
+    main(opt)
+    return opt
 
 if __name__ == "__main__":
     opt = parse_opt()
