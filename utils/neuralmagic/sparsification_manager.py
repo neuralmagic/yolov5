@@ -344,7 +344,7 @@ class SparsificationManager(object):
         :param epoch: epoch to check QAT status for
         """
         if self.has_qat_phase:
-            return self.first_qat_epoch <= epoch + 1
+            return self.first_qat_epoch < epoch + 1
         else:
             return False
 
@@ -355,7 +355,7 @@ class SparsificationManager(object):
         :param epoch: epoch to check distillation status for
         """
         if self.has_distillation_phase:
-            return self.first_distillation_epoch <= epoch + 1
+            return self.first_distillation_epoch < epoch + 1
         else:
             return False
 
