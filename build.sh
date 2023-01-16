@@ -8,4 +8,4 @@ grep --include=\*.py -rnl 'yolov5/' -e "from classify" | xargs -i@ sed -i 's/fro
 grep --include=\*.py -rnl 'yolov5/' -e "from segment" | xargs -i@ sed -i 's/from segment/from yolov5.segment/g' @
 sed -i '/^sparseml/d' yolov5/requirements.txt
 python3 -m build
-#rm -r yolov5
+rm -r yolov5
