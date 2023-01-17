@@ -287,7 +287,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             scheduler=scheduler,
             ema=ema,
             start_epoch=start_epoch,
-            steps_per_epoch=math.ceil(len(train_loader)/accumulate),
+            steps_per_epoch=len(train_loader),
             epochs=epochs,
             compute_loss=compute_loss,
             distillation_teacher=teacher_model,
@@ -384,6 +384,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 if ema:
                     ema.update(model)
                 last_opt_step = ni
+                
+            elif sparsification_manager:
+                # Call for SparseML integration since the number of steps per epoch can vary
+                # This keeps the number of steps per epoch equivalent to the number of batches per epoch
+                # Does not step the scaler or the optimizer
+                scaler.emulated_step()
 
             # Log
             if RANK in {-1, 0}:
