@@ -134,7 +134,6 @@ def neuralmagic_onnx_export(
     :param dynamic: dictionary of input or output names to list of dimensions
         of those tensors that should be exported as dynamic
     :output_names: names of output tensors
-
     :return: path to saved ONNX model
     """
 
