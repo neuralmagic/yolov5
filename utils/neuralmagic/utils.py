@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy
 import torch
 from sparseml.pytorch.optim import ScheduledModifierManager
-from sparseml.pytorch.utils import download_framework_model_by_recipe_type
+from sparseml.pytorch.utils import ModuleExporter, download_framework_model_by_recipe_type
 from sparsezoo import Model
 
 from models.yolo import Model as Yolov5Model
@@ -20,6 +20,7 @@ __all__ = [
     "ToggleableModelEMA",
     "load_ema",
     "load_sparsified_model",
+    "neuralmagic_onnx_export",
     "export_sample_inputs_outputs",
 ]
 
@@ -113,6 +114,77 @@ def nm_log_console(message: str, logger: "Logger" = None, level: str = "info"):
             logger.info(f"{colorstr('Neural Magic: ')}{message}")
 
 
+def neuralmagic_onnx_export(
+    model: torch.nn.Module,
+    sample_data: torch.Tensor,
+    weights_path: Path,
+    one_shot: Optional[str],
+    dynamic: Optional[Dict[str, int]],
+    output_names: List[str],
+) -> Path:
+    """
+    Augmented ONNX export to optimize and properly post-process sparsified models
+
+    :param model: model to export
+    :param sample_data: data to be used with export
+    :weights path: path from which the torch model was loaded. Used only for save
+        pathing and naming purposes
+    :one_shot: one_shot recipe, if one was applied. Used only for save pathing and
+        naming purposes
+    :param dynamic: dictionary of input or output names to list of dimensions
+        of those tensors that should be exported as dynamic
+    :output_names: names of output tensors
+    :return: path to saved ONNX model
+    """
+
+    # If the target model is a SparseZoo or YOLOv5 Hub model, save it to a
+    # DeepSparse_Deployment directory at the working directory root. Inside, create a
+    # subdirectory based on model/stub name
+    if str(weights_path).startswith("zoo:") or not len(weights_path.parents):
+        sub_dir = (
+            str(weights_path).split("zoo:")[1].replace("/", "_")
+            if str(weights_path).startswith("zoo:")
+            else weights_path
+        )
+
+        # If one-shot applying a recipe, update name to convey the starting stub/model
+        # and the one_shot recipe applied
+        if one_shot:
+            sub_dir = f"{sub_dir}_one_shot_{one_shot}"
+
+        save_dir = Path("DeepSparse_Deployment") / sub_dir
+        onnx_file_name = "model.onnx"
+
+    else:
+        save_dir = (
+            weights_path.parents[1] / "DeepSparse_Deployment"
+            if weights_path.parent.stem == "weights"
+            else weights_path.parent / "DeepSparse_Deployment"
+        )
+        onnx_file_name = weights_path.name
+
+    save_dir.mkdir(exist_ok=True)
+
+    nm_log_console("Exporting model to ONNX format")
+
+    # Use the SparseML custom onnx export flow for sparsified models
+    exporter = ModuleExporter(model, save_dir.absolute())
+    exporter.export_onnx(
+        sample_data,
+        name=onnx_file_name,
+        convert_qat=True,
+        input_names=["images"],
+        output_names=output_names,
+        dynamic_axes=dynamic or None,
+    )
+
+    saved_model_path = save_dir / onnx_file_name
+
+    nm_log_console(f"Exported ONNX model to {saved_model_path}")
+
+    return saved_model_path
+
+
 def export_sample_inputs_outputs(
     dataset: Union[str, Path],
     data_path: str,
@@ -132,6 +204,11 @@ def export_sample_inputs_outputs(
     :param image_size: image size
     :param onnx_path: Path to saved onnx model. Used to check if it uses uints8 inputs
     """
+
+    nm_log_console(
+        f"Exporting {number_export_samples} sample model inputs and outputs for "
+        "testing with the DeepSparse Engine"
+    )
 
     # Create dataloader
     data_dict = check_dataset(dataset, data_path)
@@ -200,6 +277,8 @@ def export_sample_inputs_outputs(
             f"and exported {exported_samples} samples",
             level="warning",
         )
+
+    nm_log_console(f"Complete export of {number_export_samples} to {save_dir}")
 
 
 def _graph_has_uint8_inputs(onnx_path: Union[str, Path]) -> bool:

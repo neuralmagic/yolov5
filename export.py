@@ -57,7 +57,6 @@ import warnings
 from pathlib import Path
 
 import pandas as pd
-from sparseml.pytorch.utils import ModuleExporter
 import torch
 from torch.utils.mobile_optimizer import optimize_for_mobile
 
@@ -73,7 +72,7 @@ from models.yolo import ClassificationModel, Detect, DetectionModel, Segmentatio
 from utils.dataloaders import LoadImages
 from utils.general import (LOGGER, Profile, check_dataset, check_img_size, check_requirements, check_version,
                            check_yaml, colorstr, file_size, get_default_args, print_args, url2file, yaml_save)
-from utils.neuralmagic import apply_recipe_one_shot, export_sample_inputs_outputs
+from utils.neuralmagic import apply_recipe_one_shot, export_sample_inputs_outputs, neuralmagic_onnx_export
 from utils.torch_utils import select_device, smart_inference_mode
 
 MACOS = platform.system() == 'Darwin'  # macOS environment
@@ -150,37 +149,20 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
             dynamic['output0'] = {0: 'batch', 1: 'anchors'}  # shape(1,25200,85)
 
     if sparsified:
-
-        # Update export directory
-        if str(f).startswith("zoo:") or one_shot and str(one_shot).startswith("zoo:"):
-            stub_str = f"{one_shot}_one_shot" if one_shot else str(f)
-            save_dir = Path("DeepSparse_Deployment") / str(stub_str).split("zoo:")[1].replace("/", "_")
-            f = save_dir / "model.onnx"
-        else:
-            save_dir = (
-                f.parents[1] / "DeepSparse_Deployment" 
-                if f.parent == "weights"
-                else f.parent / "DeepSparse_Deployment" 
-            )
-            f = save_dir / f.name 
-            
-        save_dir.mkdir(exist_ok=True)
-
+        
         # Apply the recipe in a one-shot manner
         if one_shot:
-            sparsification_manager = apply_recipe_one_shot(model, one_shot)
-
-        # Use the SparseML custom onnx export flow for sparsified models
-        exporter = ModuleExporter(model, f.parent.absolute())
-        exporter.export_onnx(
-            im,
-            name=str(f).split(os.path.sep)[-1],
-            convert_qat=True,
-            input_names=["images"],
-            output_names=output_names,
-            dynamic_axes=dynamic or None
+            _ = apply_recipe_one_shot(model, one_shot)
+                    
+        f = neuralmagic_onnx_export(
+            model=model, 
+            sample_data=im, 
+            weights_path=f, 
+            one_shot=one_shot, 
+            dynamic=(dynamic or None), 
+            output_names=output_names
         )
-
+        
         # Export sample data as numpy arrays. Can be used in inference with the DeepSparse engine
         if export_samples > 0:
             if not data:
@@ -194,7 +176,8 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
                 save_dir=f.parent, 
                 number_export_samples=export_samples, 
                 image_size=image_size[0]
-            )
+        )
+        
 
     else:
         torch.onnx.export(
