@@ -127,7 +127,7 @@ def neuralmagic_onnx_export(
 
     :param model: model to export
     :param sample_data: data to be used with export
-    :weights path: path from which the torch model was loaded. Used only for save
+    :weights_path: path from which the torch model was loaded. Used only for save
         pathing and naming purposes
     :one_shot: one_shot recipe, if one was applied. Used only for save pathing and
         naming purposes
@@ -150,7 +150,8 @@ def neuralmagic_onnx_export(
         # If one-shot applying a recipe, update name to convey the starting stub/model
         # and the one_shot recipe applied
         if one_shot:
-            sub_dir = f"{sub_dir}_one_shot_{one_shot}"
+            one_shot_str = str(weights_path).split("zoo:")[1].replace("/", "_")
+            sub_dir = f"{sub_dir}_one_shot_{one_shot_str}"
 
         save_dir = Path("DeepSparse_Deployment") / sub_dir
         onnx_file_name = "model.onnx"
