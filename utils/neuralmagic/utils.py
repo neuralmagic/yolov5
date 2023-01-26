@@ -35,7 +35,6 @@ ALMOST_ONE = 1 - 1e-9  # for incrementing epoch to be applied to recipe
 # pickled, pruned models.
 import models
 from models import common
-from utils.neuralmagic.quantization import _Add
 setattr(common, "_Add", _Add)  # Definition of the _Add module has moved
 
 # If using yolov5 as a repo and not a package, allow loading of models pickled w package
