@@ -33,7 +33,9 @@ ALMOST_ONE = 1 - 1e-9  # for incrementing epoch to be applied to recipe
 # not quantized. We've now changed to never pickling a model touched by us. This
 # namespace hacking is meant to address backwards compatibility with previously
 # pickled, pruned models.
-sys.modules["yolov5.models.common._Add"] = _Add
+from models import common
+from utils.neuralmagic.quantization import _Add
+setattr(common, "_Add", _Add)
 
 
 class ToggleableModelEMA(ModelEMA):
