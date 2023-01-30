@@ -33,9 +33,16 @@ ALMOST_ONE = 1 - 1e-9  # for incrementing epoch to be applied to recipe
 # not quantized. We've now changed to never pickling a model touched by us. This
 # namespace hacking is meant to address backwards compatibility with previously
 # pickled, pruned models.
+import models
 from models import common
 from utils.neuralmagic.quantization import _Add
-setattr(common, "_Add", _Add)
+setattr(common, "_Add", _Add)  # Definition of the _Add module has moved
+
+# If using yolov5 as a repo and not a package, allow loading of models pickled w package
+if "yolov5" not in sys.modules:
+    sys.modules["yolov5"] = ""
+    sys.modules["yolov5.models"] = models
+    sys.modules["yolov5.models.common"] = common
 
 
 class ToggleableModelEMA(ModelEMA):
@@ -90,20 +97,27 @@ def load_sparsified_model(
     # Load checkpoint if not yet loaded
     ckpt = ckpt if isinstance(ckpt, dict) else torch.load(ckpt, map_location=device)
 
-    # Construct randomly initialized model model and apply sparse structure modifiers
-    model = Yolov5Model(ckpt.get("yaml"))
-    model = update_model_bottlenecks(model).to(device)
-    checkpoint_manager = ScheduledModifierManager.from_yaml(ckpt["checkpoint_recipe"])
-    checkpoint_manager.apply_structure(
-        model, ckpt["epoch"] + ALMOST_ONE if ckpt["epoch"] >= 0 else float("inf")
-    )
+    if isinstance(ckpt["model"], torch.nn.Module):
+        model = ckpt["model"]
 
-    # Load state dict
-    model.load_state_dict(ckpt["ema"] or ckpt["model"], strict=True)
+    else:
+        # Construct randomly initialized model model and apply sparse structure modifiers
+        model = Yolov5Model(ckpt.get("yaml"))
+        model = update_model_bottlenecks(model).to(device)
+        checkpoint_manager = ScheduledModifierManager.from_yaml(
+            ckpt["checkpoint_recipe"]
+        )
+        checkpoint_manager.apply_structure(
+            model, ckpt["epoch"] + ALMOST_ONE if ckpt["epoch"] >= 0 else float("inf")
+        )
 
-    model.hyp = ckpt.get("hyp")
-    model.nc = ckpt.get("nc")
+        # Load state dict
+        model.load_state_dict(ckpt["ema"] or ckpt["model"], strict=True)
+        model.hyp = ckpt.get("hyp")
+        model.nc = ckpt.get("nc")
+
     model.sparsified = True
+    model.float()
 
     return model
 
