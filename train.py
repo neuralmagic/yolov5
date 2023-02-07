@@ -143,10 +143,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     
     # Knowledge distillation
     with torch_distributed_zero_first(LOCAL_RANK):
-        if opt.teacher_weights == "self":
-            teacher_model = deepcopy(model.eval())
-        elif opt.teacher_weights and sparsification_manager and sparsification_manager.distillation_active:
-            teacher_model = attempt_load(opt.teacher_weights, device=device) 
+        if opt.teacher_weights and sparsification_manager and sparsification_manager.distillation_active:
+            teacher_model = (
+                deepcopy(model.eval()) if opt.teacher_weights == "self" 
+                else attempt_load(opt.teacher_weights, device=device)
+            ) 
         else:
             teacher_model = None
 
