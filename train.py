@@ -320,7 +320,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         model.train()
 
-        clipping_constant = 10. * batch_size * accumulate * WORLD_SIZE / 64.
+        clipping_constant = 10. * batch_size * accumulate / 64.
 
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
