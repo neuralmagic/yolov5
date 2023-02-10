@@ -303,6 +303,7 @@ class SparsificationManager(object):
 
         # Attach recipe to wandb log
         if loggers.wandb and loggers.wandb.wandb:
+            loggers.wandb.wandb.watch(self.model, log="gradients", log_freq=100)
             artifact = loggers.wandb.wandb.Artifact("recipe", type="recipe")
             with artifact.new_file("recipe.yaml") as file:
                 file.write(str(self.train_manager))

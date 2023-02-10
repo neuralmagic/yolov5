@@ -139,7 +139,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             if opt.recipe 
             else None
         )
-    amp = check_amp(model)  # check AMP
+    #amp = check_amp(model)  # check AMP
+    amp = False
     
     # Knowledge distillation
     with torch_distributed_zero_first(LOCAL_RANK):
@@ -384,9 +385,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             # Optimize - https://pytorch.org/docs/master/notes/amp_examples.html
             if ni - last_opt_step >= accumulate:
                 scaler.unscale_(optimizer)  # unscale gradients
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clipping_threshold)  # clip gradients
+                #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clipping_threshold)  # clip gradients
                 scaler.step(optimizer)  # optimizer.step
                 scaler.update()
+                # The clipping function returns the gradient norm.
+                # Invoke it after the model update and before zeroing the gradients so
+                # it doesn't affect computation
+                gradient_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clipping_threshold)  # clip gradients
                 optimizer.zero_grad()
                 if ema:
                     ema.update(model)
@@ -443,7 +448,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             stop = stopper(epoch=epoch, fitness=fi)  # early stop check
             if fi > best_fitness:
                 best_fitness = fi
-            log_vals = list(mloss) + list(results) + lr
+            log_vals = list(mloss) + list(results) + lr + [gradient_norm]
             callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
 
             # Save model
