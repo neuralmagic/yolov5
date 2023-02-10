@@ -681,7 +681,7 @@ def parse_opt(skip_parse=False):
     parser.add_argument(
         '--include',
         nargs='+',
-        default=['torchscript'],
+        default=['onnx'],
         help='torchscript, onnx, openvino, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle')
     parser.add_argument(
         "--one-shot",
