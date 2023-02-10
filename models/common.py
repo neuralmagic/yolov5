@@ -337,8 +337,8 @@ class DetectMultiBackend(nn.Module):
         pt, jit, onnx, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle, triton = self._model_type(w)
         sparsezoo = str(w).startswith("zoo:")
         pt = pt or sparsezoo
-        pt = pt and not deepsparse # if deepsparse, use sparsezoo with the deepsparse engine, not pytorch
         fp16 &= (pt and not sparsezoo) or jit or onnx or engine  # FP16
+        pt = pt and not deepsparse # if deepsparse, use sparsezoo with the deepsparse engine, not pytorch
         nhwc = coreml or saved_model or pb or tflite or edgetpu  # BHWC formats (vs torch BCWH)
         stride = 32  # default stride
         cuda = torch.cuda.is_available() and device.type != 'cpu'  # use CUDA
