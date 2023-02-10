@@ -320,9 +320,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         model.train()
 
-        clipping_threshold = 10. * batch_size * accumulate / 64.
-        LOGGER.info(f'Adjusted gradient clipping threshold to {clipping_threshold}')
-
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
             cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
@@ -384,7 +381,14 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             # Optimize - https://pytorch.org/docs/master/notes/amp_examples.html
             if ni - last_opt_step >= accumulate:
                 scaler.unscale_(optimizer)  # unscale gradients
-                gradient_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clipping_threshold)  # clip gradients
+                if opt.clipping_method == "norm":
+                    gradient_norm = torch.nn.utils.clip_grad_norm_(model.parameters(),
+                                                                   max_norm=opt.clipping_threshold)
+                else:
+                    gradient_norm = 0.
+                if opt.clipping_method == "value":
+                    torch.nn.utils.clip_grad_value_(model.parameters(), max_norm=opt.clipping_threshold)
+                    gradient_norm = 0.
                 scaler.step(optimizer)  # optimizer.step
                 scaler.update()
                 optimizer.zero_grad()
@@ -567,6 +571,8 @@ def parse_opt(known=False, skip_parse=False):
     parser.add_argument('--upload_dataset', nargs='?', const=True, default=False, help='Upload data, "val" option')
     parser.add_argument('--bbox_interval', type=int, default=-1, help='Set bounding-box image logging interval')
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
+    parser.add_argument('--clipping_method', type=str, choices=['norm', 'value', None], default='norm', help='method for gradient clipping')
+    parser.add_argument('--clipping_threshold', type=float, default=10.0, help='Value used to clip the gradient')
 
     if skip_parse:
         opt = parser.parse_args([])
