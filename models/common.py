@@ -338,13 +338,14 @@ class DetectMultiBackend(nn.Module):
         sparsezoo = str(w).startswith("zoo:")
         pt = pt or sparsezoo
         fp16 &= (pt and not sparsezoo) or jit or onnx or engine  # FP16
+        pt = pt and not deepsparse # if deepsparse, use sparsezoo with the deepsparse engine, not pytorch
         nhwc = coreml or saved_model or pb or tflite or edgetpu  # BHWC formats (vs torch BCWH)
         stride = 32  # default stride
         cuda = torch.cuda.is_available() and device.type != 'cpu'  # use CUDA
         if not (pt or triton):
             w = attempt_download(w)  # download if not local
 
-        if pt or sparsezoo:  # PyTorch
+        if pt or sparsezoo and not deepsparse:  # PyTorch
             model = attempt_load(weights if isinstance(weights, list) else w, device=device, inplace=True, fuse=fuse)
             stride = max(int(model.stride.max()), 32)  # model stride
             names = model.module.names if hasattr(model, 'module') else model.names  # get class names
