@@ -423,5 +423,4 @@ def val_run(**kwargs):
 
 if __name__ == "__main__":
     opt = parse_opt()
-    opt.deepsparse=True
     main(opt)
