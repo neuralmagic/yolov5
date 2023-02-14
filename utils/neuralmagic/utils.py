@@ -97,7 +97,7 @@ def load_sparsified_model(
     ckpt = ckpt if isinstance(ckpt, dict) else torch.load(ckpt, map_location=device)
 
     if isinstance(ckpt["model"], torch.nn.Module):
-        model = ckpt["model"]
+        model = ckpt["model"].to(device)
 
     else:
         # Construct randomly initialized model model and apply sparse structure modifiers
