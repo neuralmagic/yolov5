@@ -378,12 +378,12 @@ def parse_opt(skip_parse=False):
     opt.data = check_yaml(opt.data)  # check YAML
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.save_txt |= opt.save_hybrid
-    print_args(vars(opt))  
     return opt
 
 
 def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
+
     print_args(vars(opt))
     if opt.task in ('train', 'val', 'test'):  # run normally
         if opt.conf_thres > 0.001:  # https://github.com/ultralytics/yolov5/issues/1466
