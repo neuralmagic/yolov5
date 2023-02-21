@@ -259,9 +259,7 @@ class SparsificationManager(object):
         # construct a ToggleableModelEMA from ModelEMA, allowing for on/off toggle
         if ema:
             # QAT is active at the start epoch, disable ema
-            qat_active = (
-                self.has_qat_phase and start_epoch >= self.first_qat_epoch
-            )
+            qat_active = self.has_qat_phase and start_epoch >= self.first_qat_epoch
 
             ema = load_ema(
                 ema.ema.state_dict(),
