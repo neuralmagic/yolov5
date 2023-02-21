@@ -35,6 +35,7 @@ ALMOST_ONE = 1 - 1e-9  # for incrementing epoch to be applied to recipe
 # pickled, pruned models.
 import models
 from models import common
+
 setattr(common, "_Add", _Add)  # Definition of the _Add module has moved
 
 # If using yolov5 as a repo and not a package, allow loading of models pickled w package
@@ -62,9 +63,7 @@ def sparsezoo_download(path: str, recipe: Optional[str] = None) -> str:
     """
     Loads model from the SparseZoo and override the path with the new download path
     """
-    return download_framework_model_by_recipe_type(
-        Model(path), recipe, "pt"
-    )
+    return download_framework_model_by_recipe_type(Model(path), recipe, "pt")
 
 
 def load_ema(

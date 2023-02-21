@@ -1,20 +1,29 @@
-import torch
 import onnx
-from models.common import Bottleneck, GhostBottleneck, DetectMultiBackend
+import torch
+
+from models.common import Bottleneck, DetectMultiBackend, GhostBottleneck
 
 try:
     from torch.nn.quantized import FloatFunctional
 except Exception:
     FloatFunctional = None
 
-__all__ = ["NMGhostBottleneck", "NMBottleneck", "update_model_bottlenecks", "is_quantized"]
+__all__ = [
+    "NMGhostBottleneck",
+    "NMBottleneck",
+    "update_model_bottlenecks",
+    "is_quantized",
+]
+
 
 def is_quantized(model: DetectMultiBackend) -> bool:
     """
     Check if DetectMultiBackend model is quantized
     """
     onnx_model = onnx.load_model(model.ds_engine.model_path)
-    return onnx_model.graph.input[0].type.tensor_type.elem_type == onnx.TensorProto.UINT8
+    return (
+        onnx_model.graph.input[0].type.tensor_type.elem_type == onnx.TensorProto.UINT8
+    )
 
 
 class _Add(torch.nn.Module):
