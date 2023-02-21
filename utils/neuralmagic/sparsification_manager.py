@@ -397,7 +397,7 @@ class SparsificationManager(object):
 
         # Calculate maximum batch size that will fit in memory
         batch_size_max = (
-            check_train_batch_size(self.model, image_size, False) / QAT_BATCH_SCALE
+            check_train_batch_size(self.model, image_size, False) // QAT_BATCH_SCALE
         )
 
         if batch_size > batch_size_max:
