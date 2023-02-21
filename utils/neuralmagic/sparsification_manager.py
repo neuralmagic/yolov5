@@ -1,6 +1,5 @@
 import math
 import os
-from copy import deepcopy
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -11,8 +10,7 @@ from utils.autobatch import check_train_batch_size
 from utils.loggers import Loggers
 from utils.loss import ComputeLoss
 from utils.neuralmagic.quantization import update_model_bottlenecks
-from utils.neuralmagic.utils import ALMOST_ONE, ToggleableModelEMA, load_ema, nm_log_console
-from utils.torch_utils import ModelEMA, de_parallel
+from utils.neuralmagic.utils import ALMOST_ONE, QAT_BATCH_SCALE, ToggleableModelEMA, load_ema, nm_log_console
 
 __all__ = [
     "SparsificationManager",
@@ -395,36 +393,40 @@ class SparsificationManager(object):
         rescales batch size and gradient accumulation to fit into memory with QAT while
         maintaining the original effective batch size
         """
-        # Temporary copy of the model with QAT applied
-        quant_model_copy = deepcopy(de_parallel(self.model))
-        train_manager_copy = ScheduledModifierManager.from_yaml(str(self.train_manager))
-        train_manager_copy.apply_structure(quant_model_copy, float("inf"))
-
-        # batch size to maintain
-        effective_batch_size = batch_size * accumulate
 
         # Calculate maximum batch size that will fit in memory
-        new_batch_size = check_train_batch_size(quant_model_copy, image_size, False)
-
-        # Roughly calculate batch size by rounding. In many circumstances this can
-        # result in an effective batch size that is 1-few off from the original
-        new_accumulate = max(round(effective_batch_size / new_batch_size), 1)
-        new_batch_size = max(round(effective_batch_size / new_accumulate), 1)
-
-        self.log_console(
-            f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
-            "accumulation steps for QAT"
+        batch_size_max = (
+            check_train_batch_size(self.model, image_size, False) / QAT_BATCH_SCALE
         )
 
-        if new_accumulate * new_batch_size != batch_size * accumulate:
+        if batch_size > batch_size_max:
+            new_batch_size = batch_size_max
+
+            # effective batch size to maintain
+            effective_batch_size = batch_size * accumulate
+
+            # Roughly calculate batch size by rounding. This can result in an effective
+            # batch size that is 1-to-few off from the original
+            new_accumulate = max(round(effective_batch_size / new_batch_size), 1)
+            new_batch_size = max(round(effective_batch_size / new_accumulate), 1)
+
             self.log_console(
-                "New effective batch size doesn't match previous effective batch size. "
-                f"Previous effective batch size: {batch_size * accumulate}. "
-                f"New effective batch size: {new_batch_size * new_accumulate}",
-                level="warning",
+                f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
+                "accumulation steps for QAT"
             )
 
-        return new_batch_size, new_accumulate
+            if new_accumulate * new_batch_size != batch_size * accumulate:
+                self.log_console(
+                    "New effective batch size doesn't match previous effective batch size. "
+                    f"Previous effective batch size: {batch_size * accumulate}. "
+                    f"New effective batch size: {new_batch_size * new_accumulate}",
+                    level="warning",
+                )
+
+            batch_size = new_batch_size
+            accumulate = new_accumulate
+
+        return batch_size, accumulate
 
     def compute_distillation_loss(
         self, epoch: int, inputs: torch.Tensor, targets: torch.Tensor
