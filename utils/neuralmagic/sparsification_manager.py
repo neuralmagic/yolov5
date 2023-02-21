@@ -11,6 +11,7 @@ from utils.loggers import Loggers
 from utils.loss import ComputeLoss
 from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.neuralmagic.utils import ALMOST_ONE, QAT_BATCH_SCALE, ToggleableModelEMA, load_ema, nm_log_console
+from utils.torch_utils import ModelEMA
 
 __all__ = [
     "SparsificationManager",
