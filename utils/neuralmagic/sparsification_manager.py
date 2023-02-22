@@ -416,7 +416,7 @@ class SparsificationManager(object):
                 "accumulation steps for QAT"
             )
 
-            if new_accumulate * new_batch_size != batch_size * accumulate:
+            if new_accumulate * new_batch_size != effective_batch_size:
                 self.log_console(
                     "New effective batch size doesn't match previous effective batch size. "
                     f"Previous effective batch size: {batch_size * accumulate}. "
