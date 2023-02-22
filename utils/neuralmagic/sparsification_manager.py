@@ -419,7 +419,7 @@ class SparsificationManager(object):
             if new_accumulate * new_batch_size != effective_batch_size:
                 self.log_console(
                     "New effective batch size doesn't match previous effective batch size. "
-                    f"Previous effective batch size: {batch_size * accumulate}. "
+                    f"Previous effective batch size: {effective_batch_size}. "
                     f"New effective batch size: {new_batch_size * new_accumulate}",
                     level="warning",
                 )
