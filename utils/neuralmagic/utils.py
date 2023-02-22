@@ -17,6 +17,7 @@ from utils.torch_utils import ModelEMA
 
 __all__ = [
     "ALMOST_ONE",
+    "QAT_BATCH_SCALE",
     "sparsezoo_download",
     "ToggleableModelEMA",
     "load_ema",
@@ -28,6 +29,7 @@ __all__ = [
 SAVE_ROOT = Path.cwd()
 RANK = int(os.getenv("RANK", -1))
 ALMOST_ONE = 1 - 1e-9  # for incrementing epoch to be applied to recipe
+QAT_BATCH_SCALE = 4  # batch size scaling to set upper limit when starting QAT
 
 # In previous integrations of NM YOLOv5, we were pickling models as long as they are
 # not quantized. We've now changed to never pickling a model touched by us. This
