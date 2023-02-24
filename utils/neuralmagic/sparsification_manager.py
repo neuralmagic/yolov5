@@ -323,13 +323,9 @@ class SparsificationManager(object):
         """
         Returns true if this is the first epoch QAT is turned on
         """
-        # Continued training of quantized model
-        if self.quantized_checkpoint:
-            return True
-
-        # Training with a quantization recipe
+        # Training with a quantization recipe or continued training of quantized model
         if not self.qat_started:
-            self.qat_started = self.qat_active(epoch)
+            self.qat_started = self.quantized_checkpoint or self.qat_active(epoch)
             return self.qat_started
         else:
             return False
@@ -396,8 +392,8 @@ class SparsificationManager(object):
         """
 
         # Calculate maximum batch size that will fit in memory
-        batch_size_max = (
-            check_train_batch_size(self.model, image_size, False) // QAT_BATCH_SCALE
+        batch_size_max = max(
+            check_train_batch_size(self.model, image_size, False) // QAT_BATCH_SCALE, 1
         )
 
         if batch_size > batch_size_max:

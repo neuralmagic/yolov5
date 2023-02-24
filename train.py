@@ -309,7 +309,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         if sparsification_manager and sparsification_manager.starting_qat(epoch):
             ema, amp, scaler = sparsification_manager.disable_ema_amp(ema, amp, scaler)
 
-            if not sparsification_manager.quantized_checkpoint:
+            if not sparsification_manager.quantized_checkpoint and not sparsification_manager.first_qat_epoch == 0:
                 # Rescale batch size for QAT
                 new_batch_size, new_accumulate = sparsification_manager.rescale_gradient_accumulation(
                     batch_size=batch_size, 
