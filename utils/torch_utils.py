@@ -365,7 +365,11 @@ def smart_resume(ckpt, optimizer, ema=None, weights='yolov5s.pt', epochs=300, re
         optimizer.load_state_dict(ckpt['optimizer'])  # optimizer
         best_fitness = ckpt['best_fitness']
     if ema and ckpt.get('ema'):
-        ema.ema.load_state_dict(ckpt['ema'].float().state_dict())  # EMA
+        ckpt_ema_module = ckpt['ema']
+        if isinstance(ckpt_ema_module, ModelEMA):
+            # unwrap if loaded to wrapped ModelEMA
+            ckpt_ema_module = ckpt_ema_module.ema
+        ema.ema.load_state_dict(ckpt_ema_module.float().state_dict())  # EMA
         ema.updates = ckpt['updates']
     if resume:
         assert start_epoch > 0, f'{weights} training to {epochs} epochs is finished, nothing to resume.\n' \
