@@ -601,7 +601,7 @@ def maybe_create_sparsification_manager(
 
         # reconstruct ToggleableModelEMA from state dictionary
         if ckpt["ema"]:
-            ckpt["ema"] = load_ema(ckpt["ema"], model)
+            ckpt["ema"] = load_ema(ckpt["ema"], model).ema
 
         return sparsification_manager
 
