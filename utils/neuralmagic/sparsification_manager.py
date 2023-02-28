@@ -263,6 +263,7 @@ class SparsificationManager(object):
             ema = load_ema(
                 ema.ema.state_dict(),
                 self.model if not qat_active else ema.ema,
+                updates = ema.updates,
                 **ema_kwargs,
             )
 
