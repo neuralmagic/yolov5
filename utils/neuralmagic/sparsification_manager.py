@@ -394,6 +394,11 @@ class SparsificationManager(object):
         effective_batch_size = batch_size * accumulate
         batch_size = max(batch_size // QAT_BATCH_SCALE, 1)
         accumulate = effective_batch_size // batch_size
+        
+        self.log_console(
+                f"Batch size rescaled to {batch_size} with {accumulate} gradient "
+                "accumulation steps for QAT"
+            )
 
         if accumulate * batch_size != effective_batch_size:
             self.log_console(
