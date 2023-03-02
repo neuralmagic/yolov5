@@ -450,7 +450,12 @@ def check_file(file, suffix=''):
         return file
     else:  # search
         files = []
-        for d in 'data', 'models', 'utils', "":  # search directories
+        
+        if file.startswith("models_v5.0"):
+            yaml_name = os.path.join(*file.split(os.sep)[1:])
+            files.extend(glob.glob(str(ROOT / "models_v5.0" / '**' / yaml_name), recursive=True))
+        
+        for d in 'data', 'models', 'utils':  # search directories
             files.extend(glob.glob(str(ROOT / d / '**' / file), recursive=True))  # find file
         assert len(files), f'File not found: {file}'  # assert file was found
         assert len(files) == 1, f"Multiple files match '{file}', specify exact path: {files}"  # assert unique
