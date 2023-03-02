@@ -455,6 +455,9 @@ def check_file(file, suffix=''):
             yaml_name = os.path.join(*file.split(os.sep)[1:])
             files.extend(glob.glob(str(ROOT / "models_v5.0" / '**' / yaml_name), recursive=True))
         
+        if file.startswith("data"):
+            file = os.path.join(*file.split(os.sep)[1:])
+        
         for d in 'data', 'models', 'utils':  # search directories
             files.extend(glob.glob(str(ROOT / d / '**' / file), recursive=True))  # find file
         assert len(files), f'File not found: {file}'  # assert file was found
