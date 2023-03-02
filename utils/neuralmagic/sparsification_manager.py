@@ -6,7 +6,6 @@ import torch
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
 
-from utils.autobatch import check_train_batch_size
 from utils.loggers import Loggers
 from utils.loss import ComputeLoss
 from utils.neuralmagic.quantization import update_model_bottlenecks
@@ -392,37 +391,22 @@ class SparsificationManager(object):
         maintaining the original effective batch size
         """
 
-        # Calculate maximum batch size that will fit in memory
-        batch_size_max = max(
-            check_train_batch_size(self.model, image_size, False) // QAT_BATCH_SCALE, 1
-        )
-
-        if batch_size > batch_size_max:
-            new_batch_size = batch_size_max
-
-            # effective batch size to maintain
-            effective_batch_size = batch_size * accumulate
-
-            # Roughly calculate batch size by rounding. This can result in an effective
-            # batch size that is 1-to-few off from the original
-            new_accumulate = max(round(effective_batch_size / new_batch_size), 1)
-            new_batch_size = max(round(effective_batch_size / new_accumulate), 1)
-
-            self.log_console(
-                f"Batch size rescaled to {new_batch_size} with {new_accumulate} gradient "
+        effective_batch_size = batch_size * accumulate
+        batch_size = max(batch_size // QAT_BATCH_SCALE, 1)
+        accumulate = effective_batch_size // batch_size
+        
+        self.log_console(
+                f"Batch size rescaled to {batch_size} with {accumulate} gradient "
                 "accumulation steps for QAT"
             )
 
-            if new_accumulate * new_batch_size != effective_batch_size:
-                self.log_console(
-                    "New effective batch size doesn't match previous effective batch size. "
-                    f"Previous effective batch size: {effective_batch_size}. "
-                    f"New effective batch size: {new_batch_size * new_accumulate}",
-                    level="warning",
-                )
-
-            batch_size = new_batch_size
-            accumulate = new_accumulate
+        if accumulate * batch_size != effective_batch_size:
+            self.log_console(
+                "New effective batch size doesn't match previous effective batch size. "
+                f"Previous effective batch size: {effective_batch_size}. "
+                f"New effective batch size: {batch_size * accumulate}",
+                level="warning",
+            )
 
         return batch_size, accumulate
 
