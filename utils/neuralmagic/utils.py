@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy
 import torch
+import yaml
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import ModuleExporter, download_framework_model_by_recipe_type
 from sparsezoo import Model
@@ -222,6 +223,7 @@ def export_sample_inputs_outputs(
     number_export_samples=100,
     image_size: int = 640,
     onnx_path: Union[str, Path, None] = None,
+    default_hyp: str = "data/hyps/hyp.scratch-low.yaml",
 ):
     """
     Export sample model input and output for testing with the DeepSparse Engine
@@ -238,6 +240,16 @@ def export_sample_inputs_outputs(
         f"Exporting {number_export_samples} sample model inputs and outputs for "
         "testing with the DeepSparse Engine"
     )
+
+    if model.hyp is None:
+        FILE = Path(__file__).resolve()
+        ROOT = FILE.parents[2]  # YOLOv5 root directory
+        HYPS_DIR = ROOT / default_hyp
+        nm_log_console(
+            f"The model hyper-parameters are not set, using defaults from {HYPS_DIR}."
+        )
+        with open(HYPS_DIR, errors="ignore") as f:
+            model.hyp = yaml.safe_load(f)
 
     # Create dataloader
     data_dict = check_dataset(dataset, data_path)
