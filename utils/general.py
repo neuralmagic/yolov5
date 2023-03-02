@@ -455,7 +455,7 @@ def check_file(file, suffix=''):
             yaml_name = os.path.join(*file.split(os.sep)[1:])
             files.extend(glob.glob(str(ROOT / "models_v5.0" / '**' / yaml_name), recursive=True))
         
-        if file.startswith("data"):
+        if file.startswith(f"data{os.sep}"):
             file = os.path.join(*file.split(os.sep)[1:])
         
         for d in 'data', 'models', 'utils':  # search directories
