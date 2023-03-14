@@ -397,11 +397,11 @@ class SparsificationManager(object):
         effective_batch_size = batch_size * accumulate
         batch_size = max(batch_size // QAT_BATCH_SCALE, 1)
         accumulate = effective_batch_size // batch_size
-        
+
         self.log_console(
-                f"Batch size rescaled to {batch_size} with {accumulate} gradient "
-                "accumulation steps for QAT"
-            )
+            f"Batch size rescaled to {batch_size} with {accumulate} gradient "
+            "accumulation steps for QAT"
+        )
 
         if accumulate * batch_size != effective_batch_size:
             self.log_console(
@@ -464,7 +464,7 @@ class SparsificationManager(object):
         """
         # checkpoint recipe saved with final models, for state re-construction upon
         # loading for validation or additional stage of sparsification
-        checkpoint_recipe = self.get_final_checkpoint_recipe() if final_epoch else None
+        composed_recipe = self.get_final_checkpoint_recipe()
 
         # Pickling is not supported for quantized models for a subset of the supported
         # torch versions, thus all sparse models are saved via their state dict
@@ -473,7 +473,9 @@ class SparsificationManager(object):
             "yaml": ckpt["model"].yaml,
             "ema": ckpt["ema"].state_dict() if ema_enabled else None,
             "updates": ckpt["updates"] if ema_enabled else None,
-            "checkpoint_recipe": str(checkpoint_recipe) if checkpoint_recipe else None,
+            "checkpoint_recipe": str(composed_recipe) if final_epoch else None,
+            # Saved to support export of intermediate checkpoints
+            "intermediate_recipe": str(composed_recipe) if not final_epoch else None,
             "epoch": -1 if final_epoch else ckpt["epoch"],
             "nc": number_classes,
         }
