@@ -79,7 +79,7 @@ def attempt_load(weights, device=None, inplace=True, fuse=True):
     for w in weights if isinstance(weights, list) else [weights]:
         ckpt = torch.load(attempt_download(w) if not str(w).startswith("zoo:") 
                 else sparsezoo_download(w), map_location='cpu')  # load
-        sparsified = bool(ckpt.get("checkpoint_recipe"))
+        sparsified = bool(ckpt.get("checkpoint_recipe") or ckpt.get("intermediate_recipe"))
         
         ckpt = (
             (ckpt.get('ema') or ckpt['model']).to(device).float() 
