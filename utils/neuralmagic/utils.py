@@ -106,11 +106,14 @@ def load_sparsified_model(
         model = Yolov5Model(ckpt.get("yaml"))
         model = update_model_bottlenecks(model).to(device)
         checkpoint_manager = ScheduledModifierManager.from_yaml(
-            ckpt["checkpoint_recipe"]
+            ckpt["checkpoint_recipe"] or ckpt["intermediate_recipe"]
         )
-        checkpoint_manager.apply_structure(
-            model, ckpt["epoch"] + ALMOST_ONE if ckpt["epoch"] >= 0 else float("inf")
+        epoch = (
+            checkpoint_manager.get_last_start_epoch() + ckpt["epoch"] + ALMOST_ONE
+            if ckpt["epoch"] >= 0
+            else float("inf")
         )
+        checkpoint_manager.apply_structure(model, epoch)
 
         # Load state dict
         model.load_state_dict(ckpt["ema"] or ckpt["model"], strict=True)
