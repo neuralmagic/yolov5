@@ -149,32 +149,20 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
         elif isinstance(model, DetectionModel):
             dynamic['output0'] = {0: 'batch', 1: 'anchors'}  # shape(1,25200,85)
 
-    if sparsified:
         
-        # Apply the recipe in a one-shot manner (inplace)
-        if one_shot:
-            apply_recipe_one_shot(model, one_shot)
+    # Apply the recipe in a one-shot manner (inplace)
+    if one_shot:
+        apply_recipe_one_shot(model, one_shot)
                     
-        f = neuralmagic_onnx_export(
-            model=model, 
-            sample_data=im, 
-            weights_path=file, 
-            one_shot=one_shot, 
-            dynamic=(dynamic or None), 
-            output_names=output_names
-        )
+    f = neuralmagic_onnx_export(
+        model=model, 
+        sample_data=im, 
+        weights_path=file, 
+        one_shot=one_shot, 
+        dynamic=(dynamic or None), 
+        output_names=output_names
+    )
 
-    else:
-        torch.onnx.export(
-            model.cpu() if dynamic else model,  # --dynamic only compatible with cpu
-            im.cpu() if dynamic else im,
-            f,
-            verbose=False,
-            opset_version=opset,
-            do_constant_folding=True,
-            input_names=['images'],
-            output_names=output_names,
-            dynamic_axes=dynamic or None)
 
     # Export sample data as numpy arrays. Can be used in inference with the DeepSparse engine
     if export_samples > 0:
