@@ -216,7 +216,9 @@ def neuralmagic_onnx_export(
 
     # set model input shape to a static shape (graph is still dynamic compatible)
     # for performance with deepsparse engine + extractable shape for analysis
-    override_model_input_shape(saved_model_path, list(sample_data.shape))
+    sample_data_shape = list(sample_data.shape)
+    sample_data_shape[0] = "BATCH"  # set only batch dimension explicitly to dynamic
+    override_model_input_shape(saved_model_path, sample_data_shape)
 
     nm_log_console(f"Exported ONNX model to {saved_model_path}")
 
