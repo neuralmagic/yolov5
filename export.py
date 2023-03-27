@@ -149,48 +149,35 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
         elif isinstance(model, DetectionModel):
             dynamic['output0'] = {0: 'batch', 1: 'anchors'}  # shape(1,25200,85)
 
-    if sparsified:
         
-        # Apply the recipe in a one-shot manner
-        if one_shot:
-            _ = apply_recipe_one_shot(model, one_shot)
+    # Apply the recipe in a one-shot manner (inplace)
+    if one_shot:
+        apply_recipe_one_shot(model, one_shot)
                     
-        f = neuralmagic_onnx_export(
-            model=model, 
-            sample_data=im, 
-            weights_path=file, 
-            one_shot=one_shot, 
-            dynamic=(dynamic or None), 
-            output_names=output_names
-        )
-        
-        # Export sample data as numpy arrays. Can be used in inference with the DeepSparse engine
-        if export_samples > 0:
-            if not data:
-                raise ValueError("export samples is greater than 0, but data arg is not set")
+    f = neuralmagic_onnx_export(
+        model=model, 
+        sample_data=im, 
+        weights_path=file, 
+        one_shot=one_shot, 
+        dynamic=(dynamic or None), 
+        output_names=output_names
+    )
 
-            _, _, *image_size = list(im.shape)
-            export_sample_inputs_outputs(
-                dataset=data,
-                data_path=data_path, 
-                model=model, 
-                save_dir=f.parent, 
-                number_export_samples=export_samples, 
-                image_size=image_size[0]
-        )
-        
 
-    else:
-        torch.onnx.export(
-            model.cpu() if dynamic else model,  # --dynamic only compatible with cpu
-            im.cpu() if dynamic else im,
-            f,
-            verbose=False,
-            opset_version=opset,
-            do_constant_folding=True,
-            input_names=['images'],
-            output_names=output_names,
-            dynamic_axes=dynamic or None)
+    # Export sample data as numpy arrays. Can be used in inference with the DeepSparse engine
+    if export_samples > 0:
+        if not data:
+            raise ValueError("export samples is greater than 0, but data arg is not set")
+
+        _, _, *image_size = list(im.shape)
+        export_sample_inputs_outputs(
+            dataset=data,
+            data_path=data_path,
+            model=model,
+            save_dir=f.parent,
+            number_export_samples=export_samples,
+            image_size=image_size[0]
+        )
 
     # Checks
     model_onnx = onnx.load(f)  # load onnx model
