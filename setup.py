@@ -6,13 +6,23 @@ def read_requirements():
     with open(os.path.join(build_dir, "yolov5", "requirements.txt")) as f:
         return f.read().splitlines()
 
+
+# default variable to be overwritten by the version.py file
+version = "unknown"
+# load and overwrite version and release info from version.py
+try:
+    exec(open(os.path.join("utils", "neuralmagic", "version.py")).read())
+except:
+    # in build.sh utils may be nested under yolov5/
+    exec(open(os.path.join("yolov5", "utils", "neuralmagic", "version.py")).read())
+
 setuptools.setup(
     name="yolov5",
-    version='6.2.0',
+    version=version,  # major.minor.patch to match NM repos, fourth entry is either yolov5 base version or nightly date
     author="",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/ultralytics/yolov5",
+    url="https://github.com/neuralmagic/yolov5",
     packages=['yolov5', 'yolov5.models', 'yolov5.utils'],
     python_requires=">=3.6",
     install_requires=read_requirements(),
