@@ -10,5 +10,5 @@ grep --include=\*.py -rnl 'yolov5/' -e "from export" | xargs -i@ sed -i 's/from 
 grep --include=\*.py -rnl 'yolov5/' -e "from classify" | xargs -i@ sed -i 's/from classify/from yolov5.classify/g' @
 grep --include=\*.py -rnl 'yolov5/' -e "from segment" | xargs -i@ sed -i 's/from segment/from yolov5.segment/g' @
 sed -i '/^sparseml/d' yolov5/requirements.txt
-python3 -m build
+python3 setup.py sdist bdist_wheel
 rm -r yolov5
