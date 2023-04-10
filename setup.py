@@ -17,7 +17,7 @@ except:
     exec(open(os.path.join("yolov5", "utils", "neuralmagic", "version.py")).read())
 
 setuptools.setup(
-    name="yolov5",
+    name="nm-yolov5" if is_release else "nm-yolov5-nightly",
     version=version,  # major.minor.patch to match NM repos, fourth entry is either yolov5 base version or nightly date
     author="",
     long_description=open("README.md", "r", encoding="utf-8").read(),
