@@ -382,7 +382,7 @@ class SparsificationManager(object):
         return ema, amp, scaler
 
     def rescale_gradient_accumulation(
-        self, batch_size: int, accumulate: int, image_size: int
+        self, batch_size: int, accumulate: int
     ) -> Tuple[int, int]:
         """
         Used when autobatch and QAT are both enabled. Training with QAT adds additional
