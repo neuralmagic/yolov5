@@ -10,7 +10,7 @@ from utils.loggers import Loggers
 from utils.loss import ComputeLoss
 from utils.neuralmagic.quantization import update_model_bottlenecks
 from utils.neuralmagic.utils import ALMOST_ONE, QAT_BATCH_SCALE, ToggleableModelEMA, load_ema, nm_log_console
-from utils.torch_utils import ModelEMA
+from utils.torch_utils import WORLD_SIZE, ModelEMA
 
 __all__ = [
     "SparsificationManager",
@@ -391,8 +391,18 @@ class SparsificationManager(object):
         maintaining the original effective batch size
         """
 
+        if batch_size == WORLD_SIZE:
+            self.log_console(
+                "Could not scale down batch size for QAT as minimum batch size of "
+                f"{batch_size} is already used. Run may encounter an out of memory "
+                "error due to QAT",
+                level="warning",
+            )
+
+            return batch_size, accumulate
+
         effective_batch_size = batch_size * accumulate
-        batch_size = max(batch_size // QAT_BATCH_SCALE, 1)
+        batch_size = max(batch_size // QAT_BATCH_SCALE, WORLD_SIZE)
         accumulate = effective_batch_size // batch_size
 
         self.log_console(
