@@ -7,6 +7,7 @@ import numpy
 import torch
 import yaml
 from sparseml.pytorch.optim import ScheduledModifierManager
+from sparseml.pytorch.sparsification.quantization import skip_onnx_input_quantize
 from sparseml.pytorch.utils import ModuleExporter, download_framework_model_by_recipe_type
 from sparseml.onnx.utils import override_model_input_shape
 from sparsezoo import Model
@@ -213,6 +214,11 @@ def neuralmagic_onnx_export(
     )
 
     saved_model_path = save_dir / onnx_file_name
+
+    try:
+        skip_onnx_input_quantize(saved_model_path, saved_model_path)
+    except Exception:
+        pass
 
     # set model input shape to a static shape (graph is still dynamic compatible)
     # for performance with deepsparse engine + extractable shape for analysis
