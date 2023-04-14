@@ -216,7 +216,7 @@ def neuralmagic_onnx_export(
     saved_model_path = save_dir / onnx_file_name
 
     try:
-        skip_onnx_input_quantize(saved_model_path, saved_model_path)
+        skip_onnx_input_quantize(str(saved_model_path), str(saved_model_path))
     except Exception:
         pass
 
