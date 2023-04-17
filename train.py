@@ -314,7 +314,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 new_batch_size, new_accumulate = sparsification_manager.rescale_gradient_accumulation(
                     batch_size=batch_size, 
                     accumulate=accumulate, 
-                    image_size=imgsz
                 )
                 if new_batch_size != batch_size:
                     batch_size = new_batch_size
