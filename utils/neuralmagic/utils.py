@@ -243,7 +243,7 @@ def export_sample_inputs_outputs(
     :param save_dir: directory to save samples to
     :param number_export_samples: number of samples to export
     :param image_size: image size
-    :param onnx_path: Path to saved onnx model. Used to check if it uses uints8 inputs
+    :param onnx_path: Path to saved onnx model. Used to check if it uses uint8 inputs
     """
 
     nm_log_console(
