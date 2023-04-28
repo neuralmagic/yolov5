@@ -41,7 +41,7 @@ seaborn>=0.11.0
 sparseml[torchvision] >= 1.4
 
 # Extras --------------------------------------
-ipython  # interactive notebook
+ipython<=8.12  # interactive notebook
 psutil  # system utilization
 thop>=0.1.1  # FLOPs computation
 # mss  # screenshots
