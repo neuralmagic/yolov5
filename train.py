@@ -93,7 +93,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     data_dict = None
     loggers = None
     if RANK in {-1, 0}:
-        loggers = Loggers(opt.log_dir or save_dir, weights, opt, hyp, LOGGER)  # loggers instance
+        log_dir = Path(opt.log_dir) if opt.log_dir else save_dir
+        loggers = Loggers(log_dir, weights, opt, hyp, LOGGER)  # loggers instance
 
         # Register actions
         for k in methods(loggers):
