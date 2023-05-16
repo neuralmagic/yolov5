@@ -682,6 +682,7 @@ def parse_opt(skip_parse=False):
         opt = parser.parse_args([])
     else: 
         opt = parser.parse_args()
+        print_args(vars(opt))
     return opt
 
 
