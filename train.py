@@ -93,7 +93,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     data_dict = None
     loggers = None
     if RANK in {-1, 0}:
-        loggers = Loggers(save_dir, weights, opt, hyp, LOGGER)  # loggers instance
+        loggers = Loggers(opt.log_dir or save_dir, weights, opt, hyp, LOGGER)  # loggers instance
 
         # Register actions
         for k in methods(loggers):
@@ -548,6 +548,7 @@ def parse_opt(known=False, skip_parse=False):
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
     parser.add_argument('--workers', type=int, default=8, help='max dataloader workers (per RANK in DDP mode)')
     parser.add_argument('--project', default=SAVE_ROOT / 'yolov5_runs/train', help='save to project/name')
+    parser.add_argument('--log-dir', default=None, help='optional path to re-route logging to')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
