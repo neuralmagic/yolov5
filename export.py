@@ -676,7 +676,6 @@ def parse_opt(skip_parse=False):
         default=None,
         help="local path or SparseZoo stub to a recipe to be applied"
                 " in one-shot manner before exporting")
-    print_args(vars(opt))
     
     if skip_parse:
         opt = parser.parse_args([])
