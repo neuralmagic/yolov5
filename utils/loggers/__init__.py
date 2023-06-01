@@ -101,7 +101,11 @@ class Loggers():
         if 'tb' in self.include and not self.opt.evolve:
             prefix = colorstr('TensorBoard: ')
             self.logger.info(f"{prefix}Start with 'tensorboard --logdir {s.parent}', view at http://localhost:6006/")
-            self.tb = SummaryWriter(str(s))
+            try:
+                self.tb = SummaryWriter(str(s))
+            except Exception as exception:
+                self.logger.info(f"TensorBoard initialization failed: {exception}, disabling TensorBoard logging.")
+                self.tb = None
 
         # W&B
         if wandb and 'wandb' in self.include:
