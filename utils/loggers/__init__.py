@@ -103,8 +103,8 @@ class Loggers():
             self.logger.info(f"{prefix}Start with 'tensorboard --logdir {s.parent}', view at http://localhost:6006/")
             try:
                 self.tb = SummaryWriter(str(s))
-            except Exception as exception:
-                self.logger.info(f"TensorBoard initialization failed: {exception}, disabling TensorBoard logging.")
+            except Exception:
+                self.logger.info(f"{prefix}Initialization failed, disabling TensorBoard logging.")
                 self.tb = None
 
         # W&B
@@ -334,8 +334,8 @@ class GenericLogger:
                 f"{prefix}Start with 'tensorboard --logdir {self.save_dir.parent}', view at http://localhost:6006/")
             try:
                 self.tb = SummaryWriter(str(s))
-            except Exception as exception:
-                self.logger.info(f"TensorBoard initialization failed: {exception}, disabling TensorBoard logging.")
+            except Exception:
+                self.logger.info(f"{prefix}Initialization failed, disabling TensorBoard logging.")
                 self.tb = None
 
 
