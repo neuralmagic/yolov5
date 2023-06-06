@@ -24,7 +24,6 @@ jobs:
              sudo pip3 install virtualenv
              virtualenv venv
              source venv/bin/activate
-             #pip install -e .
              sed -i 's/is_release = False/is_release = True/g' utils/neuralmagic/version.py
              make -B build
              deactivate
