@@ -676,13 +676,12 @@ def parse_opt(skip_parse=False):
         default=None,
         help="local path or SparseZoo stub to a recipe to be applied"
                 " in one-shot manner before exporting")
-    opt = parser.parse_args()
-    print_args(vars(opt))
     
     if skip_parse:
         opt = parser.parse_args([])
     else: 
         opt = parser.parse_args()
+        print_args(vars(opt))
     return opt
 
 
@@ -691,7 +690,7 @@ def main(opt):
         run(**vars(opt))
 
 def export_run(**kwargs):
-    opt = parse_opt() if not kwargs else parse_opt(skip_parse=True)
+    opt = parse_opt(True, skip_parse=bool(kwargs))
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
