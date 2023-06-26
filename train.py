@@ -726,7 +726,7 @@ def main(opt, callbacks=Callbacks()):
 
 def run(**kwargs):
     # Usage: import train; train.run(data='coco128.yaml', imgsz=320, weights='yolov5m.pt')
-    opt = parse_opt(True)
+    opt = parse_opt(True, skip_parse=bool(kwargs))
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
