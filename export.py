@@ -690,7 +690,7 @@ def main(opt):
         run(**vars(opt))
 
 def export_run(**kwargs):
-    opt = parse_opt(True, skip_parse=bool(kwargs))
+    opt = parse_opt(skip_parse=bool(kwargs))
     for k, v in kwargs.items():
         setattr(opt, k, v)
     main(opt)
