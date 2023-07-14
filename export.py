@@ -176,7 +176,8 @@ def export_onnx(model, im, file, opset, dynamic, simplify, sparsified=False, dat
             model=model,
             save_dir=f.parent,
             number_export_samples=export_samples,
-            image_size=image_size[0]
+            image_size=image_size[0],
+            onnx_path=f,
         )
 
     # Checks
