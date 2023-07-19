@@ -196,7 +196,8 @@ def neuralmagic_onnx_export(
             if weights_path.parent.stem == "weights"
             else weights_path.parent / "DeepSparse_Deployment"
         )
-        onnx_file_name = weights_path.with_suffix(".onnx").name
+        onnx_file = weights_path.with_suffix(".onnx").name
+        onnx_file_name = onnx_file.replace(onnx_file, "model.onnx")
 
     save_dir.mkdir(parents=True, exist_ok=True)
 
