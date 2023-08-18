@@ -11,7 +11,7 @@ on:
 
 jobs:
 
-    BUILD-SPARSEZOO_NIGHTLY:
+    BUILD-YOLOV5-NIGHTLY:
 
       uses: ./.github/workflows/util.yml
       with:

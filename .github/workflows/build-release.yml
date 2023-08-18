@@ -8,7 +8,7 @@ on:
 
 jobs:
 
-    BUILD-SPARSEZOO_RELEASE:
+    BUILD-YOLOV5-RELEASE:
 
       uses: ./.github/workflows/util.yml
       with:
