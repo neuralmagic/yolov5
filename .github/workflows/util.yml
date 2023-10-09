@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: s3
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_WEBIDENTITY_FOR_GITHUB_ACTIONS }}
           aws-region: us-east-1
