@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 from sparseml.pytorch.optim import ScheduledModifierManager
-from sparseml.pytorch.utils import SparsificationGroupLogger
+from sparseml.core.logger import SparsificationGroupLogger
 
 from utils.loggers import Loggers
 from utils.loss import ComputeLoss
